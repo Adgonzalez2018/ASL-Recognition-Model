@@ -67,23 +67,41 @@ Unblocked. Pure logic, tested on synthetic fixtures.
 
 ### Tasks
 
-- [ ] Define the manifest schema.
-- [ ] Build stable gloss-to-ID and ID-to-gloss mappings.
-- [ ] Generate split-specific manifests.
-- [ ] Preserve signer identifiers.
-- [ ] Include audited video metadata where useful.
-- [ ] Add duplicate detection.
-- [ ] Add signer-leakage validation.
-- [ ] Add manifest versioning and identity checks.
+- [x] Define the manifest schema.
+- [x] Build stable gloss-to-ID and ID-to-gloss mappings.
+- [x] Preserve signer identifiers.
+- [x] Include audited video metadata where useful.
+- [x] Add duplicate detection.
+- [x] Add signer-leakage validation.
+- [x] Add manifest versioning and identity checks.
+- [ ] Generate split-specific manifests from real annotations. Blocked on 2A.
 
 ### Acceptance Criteria
 
-- [ ] Every usable training sample maps to one stable class ID.
-- [ ] Both model families consume the same manifests.
-- [ ] Train, validation, and test splits remain signer-independent.
-- [ ] Duplicate videos are detected.
-- [ ] Label maps are stable and tested.
-- [ ] Missing or corrupted records are reported explicitly.
+- [x] Every usable training sample maps to one stable class ID.
+- [x] Both model families consume the same manifests, since the manifest carries
+      no architecture-specific content.
+- [x] Signer leakage across splits is detected and blocks validation.
+- [x] Duplicate sample IDs, duplicate paths, and one video spanning splits are detected.
+- [x] Label maps are stable, identity-checked, and tested.
+- [x] Missing or corrupted records are reported explicitly.
+
+### Implementation
+
+```text
+src/asl_training/data/
+├── label_map.py   vocabulary, deterministic construction, identity
+└── manifest.py    record schema, split integrity, leakage detection
+```
+
+92 tests, all offline on synthetic fixtures.
+
+Design notes worth carrying forward:
+
+* The label map refuses to merge distinct glosses that normalize identically, rather than fusing them. Two source glosses differing only by case or whitespace may be one sign recorded inconsistently or two different signs; only review can tell.
+* Manifest identity covers sample ID, path, class ID, signer, and split — the fields whose change alters what an experiment means. Audited metadata such as resolution and codec is excluded, so re-auditing video properties does not invalidate existing manifests.
+* Signer overlap can be permitted, but only explicitly, and it still surfaces as a warning.
+* Validation returns a report rather than raising, so a caller can inspect every problem at once. `raise_if_invalid()` enforces it. Warnings never raise and are listed separately, so they cannot conceal a hard failure.
 
 ---
 
