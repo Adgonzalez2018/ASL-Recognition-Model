@@ -6,7 +6,7 @@ Phase 2: ASL Citizen Audit and Data Layer
 
 ## Status
 
-In progress. Phase 2A tooling and Phase 2B contracts complete; 2A execution blocked on dataset access.
+In progress. Phase 2B and 2C complete; 2A tooling complete, its execution blocked on dataset access.
 
 ## Objective
 
@@ -14,13 +14,13 @@ Understand the actual ASL Citizen distribution, then build a reproducible path f
 
 ## Current Task
 
-Phase 2C: video decoding, temporal sampling, and transforms. Running the 2A audit once a Kaggle runtime has the mirror attached.
+Running the Phase 2A audit once a Kaggle runtime has the mirror attached. Everything buildable without the dataset is done.
 
 ## Blockers
 
 Phase 2A cannot execute until the dataset is reachable from a runtime. The audit reads real files; it cannot be simulated.
 
-Phase 2B and the sampler logic in 2C are unblocked, because they are pure logic testable on synthetic fixtures.
+Phases 2B and 2C are complete, having been built and tested against synthetic datasets with real encoded video. The pipeline is ready for real data; only the audit itself needs the dataset.
 
 ## Environment Decisions
 
@@ -121,36 +121,68 @@ Design notes worth carrying forward:
 
 ## Phase 2C: Video Input Pipeline
 
-Sampler logic is unblocked. Decoder work needs real video fixtures, which can be small and synthetic.
+Complete, verified against synthetic datasets with real encoded video.
 
 ### Tasks
 
-- [ ] Implement video decoding.
-- [ ] Convert decoded frames to RGB, verified rather than assumed.
-- [ ] Implement fixed-frame temporal sampling.
-- [ ] Define and implement the short-video policy.
-- [ ] Define and implement long-video sampling.
-- [ ] Implement deterministic evaluation sampling.
-- [ ] Implement minimal baseline training transforms.
-- [ ] Ensure spatial transforms are temporally consistent across a clip.
-- [ ] Implement batch collation.
-- [ ] Add data-loader configuration.
-- [ ] Add focused data-pipeline tests.
+- [x] Implement video decoding.
+- [x] Convert decoded frames to RGB, verified rather than assumed.
+- [x] Implement fixed-frame temporal sampling.
+- [x] Define and implement the short-video policy.
+- [x] Define and implement long-video sampling.
+- [x] Implement deterministic evaluation sampling.
+- [x] Implement minimal baseline training transforms.
+- [x] Ensure spatial transforms are temporally consistent across a clip.
+- [x] Implement batch collation.
+- [x] Add data-loader configuration.
+- [x] Add focused data-pipeline tests.
 
 ### Baseline Transform Policy
 
 Allowed: required resizing, fixed crop size, mild random crop during training, model-compatible normalization, controlled temporal sampling.
 
-Disabled initially: horizontal flipping, speed jitter, frame dropping, compression simulation, blur, strong lighting changes, aggressive rotation, heavy random erasing.
+Disabled initially: horizontal flipping, speed jitter, frame dropping, compression simulation, blur, strong lighting changes, aggressive rotation, heavy random erasing. The disabled list is recorded in the resolved configuration rather than left implied.
 
 ### Acceptance Criteria
 
-- [ ] A real dataset sample decodes.
-- [ ] Exactly the configured frame count is returned.
-- [ ] Output matches the model-layer contract, verified against both adapters.
-- [ ] Evaluation preprocessing is deterministic.
-- [ ] Train transforms remain temporally consistent.
-- [ ] Short and malformed videos follow documented policy.
+- [x] A real dataset sample decodes.
+- [x] Exactly the configured frame count is returned, for every strategy and clip length.
+- [x] Output matches the model-layer contract, verified by passing a real decoded batch through both adapters.
+- [x] Evaluation preprocessing is deterministic, and non-deterministic configuration is rejected rather than merely discouraged.
+- [x] Train transforms remain temporally consistent.
+- [x] Short and malformed videos follow documented policy.
+
+### Implementation
+
+```text
+src/asl_training/data/
+├── sampling.py    temporal frame selection and the short-video policy
+├── decode.py      video to ordered RGB frames
+├── transforms.py  spatial preprocessing, one parameter set per clip
+└── dataset.py     dataset, collation, loader config, preprocessing identity
+
+configs/datasets/asl_citizen.yaml
+```
+
+### Design notes
+
+**Determinism is enforced, not documented.** Constructing a validation or test dataset with a random sampler or a training transform raises. An unreproducible evaluation run should be impossible to configure, not merely discouraged.
+
+**Order and colour are verified against pixels.** Decode tests encode a red ramp that increases with frame index, so chronological order is checked from decoded content rather than trusted. A constant blue channel catches RGB/BGR swaps.
+
+**Temporal consistency is tested on identical-frame clips.** If every frame of a clip is the same image, any variation in the output means spatial parameters were drawn per frame. That is the bug the test exists to catch.
+
+**Time reversal is unavailable.** Not disabled by default — absent from the strategy list, with a test asserting it stays absent. Reversed motion changes what a sign means.
+
+**Runtime failures are counted.** The default policy raises, because a sample failing at runtime means the audit missed something and the run's dataset is not what was recorded. The `skip` policy substitutes a neighbour and records the failure; it never silently shrinks a batch.
+
+### Finding: silent normalization bug
+
+The output-range test caught a real defect. `normalize` scaled `uint8` to [0, 1] conditionally on dtype, but both transforms had already cast to float during resizing, so the 1/255 scaling was skipped. Every tensor left the pipeline roughly 255x too large.
+
+Nothing raised. Training would have diverged immediately and looked like a bad learning rate or an unstable model.
+
+The fix removes the dtype-conditional behaviour: `to_unit_float` converts explicitly and `normalize` only standardizes. A regression test asserts the output range directly, since that is the symptom a shape check cannot see.
 
 ---
 
