@@ -119,25 +119,29 @@ def per_class_metrics(
     _validate_pair(logits, labels)
     predictions = predicted_classes(logits)
 
+    # Counted with bincount rather than a per-class scan. This runs once per
+    # validation epoch over the full vocabulary, and a 2731-iteration pass of
+    # tensor comparisons there is a real cost.
+    support = torch.bincount(labels, minlength=num_classes)
+    predicted = torch.bincount(predictions, minlength=num_classes)
+    hits = torch.bincount(labels[predictions == labels], minlength=num_classes)
+
     results = []
     for class_id in range(num_classes):
-        is_true = labels == class_id
-        is_predicted = predictions == class_id
+        support_count = int(support[class_id])
+        predicted_count = int(predicted[class_id])
+        true_positives = int(hits[class_id])
 
-        support = int(is_true.sum())
-        predicted = int(is_predicted.sum())
-        true_positives = int((is_true & is_predicted).sum())
-
-        precision = true_positives / predicted if predicted else 0.0
-        recall = true_positives / support if support else 0.0
+        precision = true_positives / predicted_count if predicted_count else 0.0
+        recall = true_positives / support_count if support_count else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
 
         results.append(
             PerClassMetrics(
                 class_id=class_id,
                 gloss=glosses[class_id] if glosses else None,
-                support=support,
-                predicted=predicted,
+                support=support_count,
+                predicted=predicted_count,
                 true_positives=true_positives,
                 precision=precision,
                 recall=recall,

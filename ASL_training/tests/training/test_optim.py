@@ -310,3 +310,37 @@ def test_yaml_requires_the_training_key(tmp_path):
     path.write_text("experiment: e\n")
     with pytest.raises(ValueError, match="missing required top-level 'training' key"):
         TrainingConfig.from_yaml(path)
+
+
+# Shipped configuration --------------------------------------------------------
+
+
+def test_shipped_baseline_config_is_valid():
+    """The committed baseline must parse and carry the intended policy."""
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "configs" / "training" / "baseline.yaml"
+    config = TrainingConfig.from_yaml(path, experiment="exp", run_name="run")
+
+    assert config.run_kind == "full"
+    assert config.optimizer.name == "adamw"
+    assert config.scheduler.interval == "step"
+    assert config.checkpoint_every_minutes, "Colab runs need wall-clock checkpointing"
+
+
+def test_shipped_selection_metric_is_actually_produced():
+    """A selection metric the trainer cannot compute would select nothing."""
+    from pathlib import Path
+
+    import torch
+
+    from asl_training.training import default_metrics
+
+    path = Path(__file__).resolve().parents[2] / "configs" / "training" / "baseline.yaml"
+    config = TrainingConfig.from_yaml(path, experiment="exp", run_name="run")
+
+    available = default_metrics(torch.randn(20, 10), torch.randint(0, 10, (20,)))
+    assert config.selection_metric in available, (
+        f"baseline.yaml selects on {config.selection_metric!r}, which the trainer "
+        f"does not produce. Available: {sorted(available)}"
+    )

@@ -480,6 +480,17 @@ class Trainer:
     def _finish_epoch(self, result: EpochResult) -> None:
         self.history.append(result)
 
+        # A selection metric the metric function never produces would mean no
+        # checkpoint is ever marked best, and the run would finish looking
+        # successful with nothing selected.
+        if result.validation and self.config.selection_metric not in result.validation:
+            raise ValueError(
+                f"selection_metric {self.config.selection_metric!r} is not produced "
+                f"by the validation metrics. Available: "
+                f"{', '.join(sorted(result.validation))}. No checkpoint could ever "
+                f"be selected as best."
+            )
+
         selected = result.validation.get(self.config.selection_metric)
         improved = False
         if selected is not None and is_better(
@@ -565,18 +576,39 @@ class Trainer:
 
 
 def default_metrics(logits: torch.Tensor, labels: torch.Tensor) -> dict[str, float]:
-    """Top-1 and top-5 accuracy.
+    """Validation metrics available for checkpoint selection.
 
-    A placeholder so the training loop can select checkpoints before the
-    evaluation layer exists. Phase 4 replaces it with the full metric set.
+    A restricted set, which docs/EVALUATION_CONTRACT.md permits for in-training
+    validation: aggregate values only, without the per-class, per-signer, or
+    confusion breakdowns. Full evaluation runs separately from a checkpoint.
+
+    Macro F1 and mean per-class accuracy are included because ASL Citizen's
+    class support is uneven, and top-1 can rise while the tail is neglected.
     """
+    from ..evaluation.metrics import (
+        macro_f1,
+        mean_per_class_accuracy,
+        negative_log_likelihood,
+        per_class_metrics,
+        top1_accuracy,
+        top_k_accuracy,
+    )
+
     if logits.numel() == 0:
         return {}
 
-    top1 = (logits.argmax(dim=1) == labels).float().mean().item()
-    metrics = {"top1_accuracy": top1}
+    per_class = per_class_metrics(logits, labels, logits.shape[1])
+    macro, _ = macro_f1(per_class)
+    balanced, _ = mean_per_class_accuracy(per_class)
 
-    if logits.shape[1] >= 5:
-        top5 = logits.topk(5, dim=1).indices
-        metrics["top5_accuracy"] = (top5 == labels.unsqueeze(1)).any(dim=1).float().mean().item()
+    metrics = {
+        "top1_accuracy": top1_accuracy(logits, labels),
+        "macro_f1": macro,
+        "mean_per_class_accuracy": balanced,
+        "negative_log_likelihood": negative_log_likelihood(logits, labels),
+    }
+
+    top5 = top_k_accuracy(logits, labels, 5)
+    if top5 is not None:
+        metrics["top5_accuracy"] = top5
     return metrics

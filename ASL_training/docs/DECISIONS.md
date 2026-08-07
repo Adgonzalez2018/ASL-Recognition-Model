@@ -288,3 +288,46 @@ Separately, Kaggle attaches its datasets read-only at `/kaggle/input` with no do
 **Train on Kaggle instead of Colab.** Removes staging entirely, since the data is already attached. Rejected because Kaggle's session limits are tighter than Colab's and its GPU allocation is less generous for a multi-hour fine-tuning run. Kaggle is used for the audit, where its strengths apply.
 
 **Read the dataset directly from mounted Drive.** Simplest to set up, far too slow to decode thousands of videos per epoch, and prone to Drive rate limiting.
+
+---
+
+## D-008: Best-checkpoint selection uses macro F1
+
+Date: 2026-08-07
+Status: Accepted
+Phase: 3
+
+### Context
+
+`docs/TRAINING_CONTRACT.md` requires an explicit checkpoint-selection metric and direction. The Phase 3 baseline configuration used top-1 accuracy, chosen when the training loop had only a placeholder metric set and macro F1 was not yet computable. Phase 4 made the full metric set available.
+
+ASL Citizen has an uneven class distribution across a large vocabulary. Top-1 accuracy is dominated by well-supported classes, so a checkpoint can improve on frequent signs while regressing on rare ones and still score higher. Selecting on top-1 would systematically prefer such checkpoints.
+
+`docs/PROJECT.md` lists balanced performance across classes as a primary goal, and macro F1 as a success target. The selection metric should match the goal.
+
+Changing this after baseline runs would invalidate comparisons between them, so it had to be settled before the first real run.
+
+### Decision
+
+Best-checkpoint selection maximizes validation macro F1.
+
+Top-1 accuracy remains the headline reported metric and is still recorded every epoch. It is no longer what decides which weights are kept.
+
+In-training validation computes a restricted metric set — top-1, top-5, macro F1, mean per-class accuracy, and NLL — which `docs/EVALUATION_CONTRACT.md` permits. Per-class, per-signer, and confusion breakdowns belong to full evaluation from a checkpoint.
+
+### Consequences
+
+* Selection favours checkpoints that serve rare signs, which is what the project's stated goals ask for.
+* Macro F1 is noisier than top-1 on a validation split where many classes have few samples, so the selected epoch may vary more between seeds. Seed variability should be reported in Phase 5.
+* Macro F1 over the validation split uses the `support` averaging policy: classes absent from validation are excluded and the count is reported alongside the value.
+* Validation now computes per-class counts over the full vocabulary each epoch. This is done with `bincount` rather than a per-class scan, so the cost is negligible.
+* A `selection_metric` the metric function does not produce now raises rather than silently selecting no checkpoint. Previously a typo would have produced a run that finished successfully with no best checkpoint.
+* Runs selected on top-1 are not directly comparable to runs selected on macro F1. No baseline runs had been performed when this changed, so nothing was invalidated.
+
+### Alternatives considered
+
+**Keep top-1 accuracy.** Simplest and matches the headline success target, but can improve while the long tail degrades, which is the failure mode this project most needs to avoid.
+
+**Decide after a smoke run.** Would have shown how the two diverge on real data, at the cost of an extra run and a decision made under time pressure once training was already underway.
+
+**Validation loss.** Stable and cheap, but only loosely coupled to the balanced-performance goal, and harder to reason about across vocabulary sizes.

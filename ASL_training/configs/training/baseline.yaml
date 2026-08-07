@@ -44,10 +44,12 @@ training:
     # Advances per optimizer step, never per micro-batch.
     interval: step
 
-  # Best-checkpoint selection. Top-1 is the headline metric; macro F1 becomes
-  # available once the Phase 4 evaluation layer supplies it, and is arguably the
-  # better choice given ASL Citizen's class imbalance.
-  selection_metric: top1_accuracy
+  # Best-checkpoint selection. Macro F1 weights every class equally, so a
+  # checkpoint that improves on frequent signs while neglecting rare ones does
+  # not win. Top-1 remains the headline reported metric, but it can climb while
+  # the long tail is ignored, which makes it the weaker selection criterion on a
+  # vocabulary this uneven. See D-008.
+  selection_metric: macro_f1
   selection_mode: max
   validate_every_epochs: 1
 

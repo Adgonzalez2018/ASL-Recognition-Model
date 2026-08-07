@@ -366,3 +366,51 @@ def test_top5_is_reported_when_defined():
     metrics = default_metrics(torch.randn(4, 10), torch.tensor([0, 1, 2, 3]))
     assert "top5_accuracy" in metrics
     assert metrics["top5_accuracy"] >= metrics["top1_accuracy"]
+
+
+# Checkpoint-selection metric --------------------------------------------------
+
+
+def test_validation_produces_the_metrics_selection_needs(model_config, tmp_path):
+    """Every configured selection_metric must actually be computable."""
+    trainer = make_trainer(model_config, tmp_path, epochs=1)
+    metrics = trainer.validate()
+
+    for name in ("top1_accuracy", "macro_f1", "mean_per_class_accuracy"):
+        assert name in metrics, f"{name} is not available for checkpoint selection"
+
+
+def test_macro_f1_can_drive_selection(model_config, tmp_path):
+    trainer = make_trainer(model_config, tmp_path, epochs=2, selection_metric="macro_f1")
+    trainer.train()
+
+    assert trainer.state.best_metric is not None
+    assert trainer.checkpoints.best_path.exists()
+
+    recorded = [h.validation["macro_f1"] for h in trainer.history if h.validation]
+    assert trainer.state.best_metric == pytest.approx(max(recorded))
+
+
+def test_unavailable_selection_metric_fails_loudly(model_config, tmp_path):
+    """Otherwise the run finishes looking fine with no checkpoint selected."""
+    trainer = make_trainer(model_config, tmp_path, epochs=1, selection_metric="f1_at_k")
+    with pytest.raises(ValueError, match="is not produced by the validation metrics"):
+        trainer.train()
+
+
+def test_macro_f1_differs_from_top1_on_imbalanced_predictions():
+    """The reason macro F1 is the selection metric: top-1 can hide the tail."""
+    import torch
+
+    from asl_training.training import default_metrics
+
+    # 18 samples of class 0, one each of classes 1 and 2. Predict class 0 always.
+    labels = torch.tensor([0] * 18 + [1, 2])
+    logits = torch.zeros(20, 3)
+    logits[:, 0] = 10.0
+
+    metrics = default_metrics(logits, labels)
+
+    assert metrics["top1_accuracy"] == pytest.approx(0.9)
+    assert metrics["macro_f1"] < 0.4
+    assert metrics["mean_per_class_accuracy"] == pytest.approx(1 / 3)

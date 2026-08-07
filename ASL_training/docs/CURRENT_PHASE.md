@@ -284,7 +284,7 @@ Training-layer coverage: checkpoint and resume, optimizer and scheduler, loop be
 ## Remaining
 
 * Preflight mode: GPU type, peak memory, throughput, estimated epoch duration, checkpoint size. Most valuable measured on real Colab hardware with real data, so it is deferred until the dataset is reachable.
-* The default metric set is a placeholder. Phase 4 replaces it, and `selection_metric` should likely become macro F1 given ASL Citizen's class imbalance.
+* ~~The default metric set is a placeholder.~~ Resolved: in-training validation now computes the real restricted metric set, and `selection_metric` is macro F1. See D-008.
 
 ---
 
