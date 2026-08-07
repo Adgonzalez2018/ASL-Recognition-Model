@@ -1,0 +1,61 @@
+# Clean baseline training policy.
+#
+# This is the control against which every robustness experiment is compared, so
+# it uses restrained augmentation and standard optimization. Changes here
+# invalidate comparisons against existing baseline runs.
+#
+# experiment and run_name are supplied per run, on the command line.
+
+training:
+  run_kind: full
+  seed: 42
+
+  epochs: 20
+  batch_size: 8
+
+  # Effective batch = batch_size x gradient_accumulation_steps. Raise this
+  # rather than batch_size when GPU memory is the constraint, so the effective
+  # batch stays comparable across runs on different hardware.
+  gradient_accumulation_steps: 4
+
+  # bf16 where the GPU supports it, falling back to fp16 with loss scaling.
+  # A downgrade is logged and recorded in run metadata rather than applied
+  # silently. See docs/ENVIRONMENTS.md.
+  precision: bf16
+  grad_clip_norm: 1.0
+
+  loss: cross_entropy
+
+  optimizer:
+    name: adamw
+    # Conservative for full fine-tuning of a pretrained video backbone.
+    lr: 1.0e-4
+    # The head is randomly initialized, so it can move faster than the backbone.
+    head_lr: 1.0e-3
+    weight_decay: 0.05
+    betas: [0.9, 0.999]
+
+  scheduler:
+    name: cosine
+    # Warmup keeps the fresh head from taking a large first step against
+    # pretrained weights.
+    warmup_ratio: 0.05
+    min_lr_ratio: 0.01
+    # Advances per optimizer step, never per micro-batch.
+    interval: step
+
+  # Best-checkpoint selection. Top-1 is the headline metric; macro F1 becomes
+  # available once the Phase 4 evaluation layer supplies it, and is arguably the
+  # better choice given ASL Citizen's class imbalance.
+  selection_metric: top1_accuracy
+  selection_mode: max
+  validate_every_epochs: 1
+
+  # Colab sessions end without warning, so an interruption should cost at most
+  # this much work. Per-epoch alone is not enough: a full-dataset epoch can
+  # outlast a session. See D-004.
+  checkpoint_every_minutes: 20
+  keep_periodic: false
+
+  log_every_steps: 50
+  device: auto

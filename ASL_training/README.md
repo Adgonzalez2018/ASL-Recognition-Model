@@ -8,7 +8,7 @@ This project covers training, evaluation, calibration, and robustness only. Infe
 
 ## Status
 
-Phase 1: Basic Model Layer.
+Phase 2 (data layer) is complete apart from running the dataset audit, which needs the dataset. Phase 3 (training layer) is complete apart from preflight.
 
 The active granular plan is `docs/CURRENT_PHASE.md`. The stable phase sequence is `docs/ROADMAP.md`.
 
@@ -49,6 +49,28 @@ Lint and format:
 ```bash
 ruff check ASL_training && ruff format --check ASL_training
 ```
+
+## Audit the dataset
+
+Reads the dataset's own split files, builds the label map and manifests, probes every video, and reports what the dataset actually contains. Required before full training.
+
+```bash
+python ASL_training/scripts/audit_dataset.py --dataset-root "$ASL_DATASET_ROOT" --output-dir ASL_training/artifacts --write-manifests
+```
+
+Exits non-zero on any integrity failure. Intended to run on Kaggle, where the mirror is already attached; see `docs/DECISIONS.md` D-007.
+
+## Train
+
+```bash
+python ASL_training/scripts/train.py \
+    --model-config ASL_training/configs/models/videomae_base.yaml \
+    --training-config ASL_training/configs/training/baseline.yaml \
+    --experiment exp-001-videomae-baseline \
+    --run-name videomae-baseline-seed42
+```
+
+Re-running the same command resumes from the last checkpoint rather than restarting, which is the normal path on Colab. The test manifest is never loaded.
 
 ## Model preflight
 

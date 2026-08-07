@@ -6,7 +6,8 @@ Phase 2: ASL Citizen Audit and Data Layer
 
 ## Status
 
-In progress. Phase 2B and 2C complete; 2A tooling complete, its execution blocked on dataset access.
+Phase 2: 2B and 2C complete, 2A tooling complete with execution blocked on dataset access.
+Phase 3: training layer complete except preflight, started in parallel since it does not need the dataset.
 
 ## Objective
 
@@ -14,7 +15,7 @@ Understand the actual ASL Citizen distribution, then build a reproducible path f
 
 ## Current Task
 
-Running the Phase 2A audit once a Kaggle runtime has the mirror attached. Everything buildable without the dataset is done.
+Running the Phase 2A audit once a Kaggle runtime has the mirror attached. Everything buildable without the dataset is done through Phase 3.
 
 ## Blockers
 
@@ -200,4 +201,92 @@ A reproducible ASL Citizen data pipeline shared by both model families.
 
 ## Phase Summary
 
-Not yet complete.
+Not yet complete. The audit remains to be run.
+
+---
+
+# Phase 3: Training Layer (started in parallel)
+
+Phase 2 is held open pending the audit, which needs the dataset. Phase 3 does not: the training layer is testable end to end on synthetic manifests and tiny models, and nothing the audit could find would change its design.
+
+This is a deliberate deviation from the roadmap's strict phase ordering, recorded here rather than left implicit.
+
+## Tasks
+
+- [x] Implement multiclass cross-entropy training.
+- [x] Construct the optimizer through configuration.
+- [x] Add learning-rate scheduling.
+- [x] Add mixed precision where supported.
+- [x] Add gradient accumulation.
+- [x] Add gradient clipping.
+- [x] Add configurable full-model fine-tuning.
+- [x] Add epoch and step logging.
+- [x] Add validation scheduling.
+- [x] Add best-checkpoint selection using validation metrics.
+- [x] Add periodic checkpointing.
+- [x] Add checkpoint resume.
+- [x] Capture configuration and environment metadata.
+- [x] Capture Git commit and dataset identities.
+- [x] Add one-batch and short smoke-run tests.
+- [x] Add a normal command-line training entry point.
+- [ ] Preflight mode reporting throughput and estimated epoch duration.
+
+## Acceptance Criteria
+
+- [x] One complete epoch runs on a controlled subset.
+- [x] Loss decreases during a smoke run.
+- [x] Validation executes without updating weights.
+- [x] Best-checkpoint tracking works.
+- [x] Interrupted training resumes, verified across separate invocations.
+- [x] The run captures enough metadata for reproducibility.
+- [x] No silent dataset reduction occurs; truncation forces a `subset` label.
+- [x] The same orchestration supports both model adapters.
+
+## Implementation
+
+```text
+src/asl_training/training/
+├── config.py      resolved run configuration
+├── optim.py       optimizer groups, per-optimizer-step scheduling
+├── checkpoint.py  atomic checkpointing, resume, compatibility validation
+└── loop.py        training orchestration
+
+configs/training/baseline.yaml
+scripts/train.py
+```
+
+## Design notes
+
+**Resume is treated as the normal path, not recovery.** Per D-004, Colab sessions end without warning. Checkpoint writes are atomic — temp file, fsync, rename — and the previous checkpoint is retained, so a session killed mid-write cannot leave a truncated file as the only resume point. Loading falls back to the retained copy and says so.
+
+**Resume is distinguished from transfer.** Resuming validates architecture, class count, label-map identity, preprocessing identity, fine-tuning strategy, optimizer type, and scheduler type. Any mismatch fails with a message pointing at model-state loading instead. Restoring optimizer momentum belonging to a different configuration would perturb a run invisibly.
+
+**The schedule advances per optimizer step.** Under gradient accumulation, stepping per micro-batch would compress the schedule by the accumulation factor with no error at all. A test asserts `scheduler.last_epoch == optimizer_step < micro_step`.
+
+**Accumulation arithmetic is verified by equivalence.** Batch 8 and batch 4 with accumulation 2 are trained from the same seed on the same data, and the resulting weights must agree. Scaling the loss twice, or not at all, moves them apart — that is the failure this catches, because neither shows up as an error.
+
+**A reduced run cannot pose as a baseline.** `--limit-samples` forces `run_kind` to `subset` even when the caller explicitly passed `--run-kind full`, and the warning says so.
+
+**The test split is never loaded.** The training command reads only train and validation manifests, and a test asserts it by spying on manifest loading.
+
+**Non-finite losses are counted, not hidden.** The batch is skipped so one bad step cannot poison the weights, but the count appears in the epoch record.
+
+## Validation
+
+| Command | Result |
+|---|---|
+| `pytest ASL_training/tests` | passing |
+| `ruff check` / `ruff format --check` | passing |
+
+Training-layer coverage: checkpoint and resume, optimizer and scheduler, loop behaviour, and an end-to-end integration test that runs the real `scripts/train.py` from annotations through manifests, decoding, training, checkpointing, and resume across separate invocations.
+
+## Remaining
+
+* Preflight mode: GPU type, peak memory, throughput, estimated epoch duration, checkpoint size. Most valuable measured on real Colab hardware with real data, so it is deferred until the dataset is reachable.
+* The default metric set is a placeholder. Phase 4 replaces it, and `selection_metric` should likely become macro F1 given ASL Citizen's class imbalance.
+
+## Note on data-loader workers
+
+`--num-workers` defaults to 4 and is configurable, because video decoding is CPU-bound and worker count is commonly the training bottleneck rather than the GPU. Colab's CPU allocation varies, so this will want tuning against real hardware; preflight should report whether the loader or the GPU is limiting.
+
+Integration tests run with `--num-workers 0`. Spawned workers deadlock under pytest on macOS, and worker behaviour is not what those tests exercise.
