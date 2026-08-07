@@ -52,6 +52,8 @@ The evaluation and experiment layers may be developed in parallel once the first
 
 # Phase 0: Repository Foundation
 
+Status: Complete. Archived at `docs/phases/archive/PHASE-0-repository-foundation.md`.
+
 ## Objective
 
 Establish the repository, documentation, dependency boundaries, and development commands.
@@ -91,6 +93,8 @@ Establish the repository, documentation, dependency boundaries, and development 
 ---
 
 # Phase 1: Basic Model Layer
+
+Status: Complete. Archived at `docs/phases/archive/PHASE-1-basic-model-layer.md`.
 
 ## Objective
 
@@ -163,6 +167,8 @@ A stable model-layer interface that the data and training layers can target.
 ---
 
 # Phase 2: ASL Citizen Audit and Data Layer
+
+Status: Active. Granular plan in `docs/CURRENT_PHASE.md`.
 
 ## Objective
 
@@ -802,12 +808,13 @@ These concerns should not alter the initial training implementation unless a spe
 
 # Immediate Next Task
 
-Begin Phase 0 if the repository foundation does not yet exist.
+Phases 0 and 1 are complete and archived under `docs/phases/archive/`.
 
-Otherwise begin Phase 1:
+The active phase is Phase 2, ASL Citizen audit and data layer:
 
 ```text
-Implement the basic shared model layer for VideoMAE-Base and Video Swin-Tiny using dummy video batches only.
+Audit the real ASL Citizen distribution, then build a reproducible path from
+raw videos to standardized model batches shared by both architectures.
 ```
 
-The first phase should establish model contracts and smoke tests without implementing the full ASL Citizen data pipeline.
+The granular plan, current task, and blockers live in `docs/CURRENT_PHASE.md`.

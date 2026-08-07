@@ -244,3 +244,47 @@ The adapter additionally classifies every missing and unused key as either expec
 **Pin transformers below 5.0.** Would likely avoid the rename, but pins the project to an aging release, conflicts with Colab's preinstalled versions, and leaves the failure mode undetected rather than fixed.
 
 **Fail on the mismatch.** Safer in isolation, but a future transformers release could rename other keys cosmetically and block all training for no real reason. Detecting, repairing, and reporting is more robust than refusing to run.
+
+---
+
+## D-007: Dataset on ephemeral disk, checkpoints on Drive; audit runs on Kaggle
+
+Date: 2026-08-07
+Status: Accepted
+Phase: 2
+
+### Context
+
+The project trains on Google Colab against a Kaggle mirror of ASL Citizen, and no local dataset copy is wanted.
+
+The governing constraint is size. ASL Citizen is roughly 84,000 videos, tens of gigabytes. Google Drive's free tier is 15 GB, so the dataset does not fit on Drive at all on that tier. Meanwhile Colab's runtime disk is ample but disappears when the session ends, and Drive is persistent but slow and rate-limited.
+
+Checkpoints have the opposite profile. A resumable VideoMAE checkpoint is roughly 1 GB — 337 MB of weights plus AdamW's two moment tensors — and a model-only export is about 337 MB. Those fit on Drive comfortably.
+
+Separately, Kaggle attaches its datasets read-only at `/kaggle/input` with no download step at all, while Colab would have to transfer the whole dataset every session.
+
+### Decision
+
+**Storage split.** Raw video data lives only on ephemeral runtime disk. Checkpoints, logs, run metadata, and reports live on Google Drive.
+
+**Dataset staging on Colab.** Download from the Kaggle mirror to `/content` at the start of each session. Do not stage the dataset through Drive, and do not decode video off a mounted Drive.
+
+**Checkpoint retention.** Keep one resumable `latest` checkpoint and one model-only `best` export on Drive, roughly 1.4 GB combined. Retain one prior `latest` during writes so an interrupted write cannot destroy the only resume point. Periodic checkpoints are opt-in, because they multiply Drive usage quickly.
+
+**Run the Phase 2A audit on Kaggle, not Colab.** The dataset is already mounted there, so the audit needs no transfer. The audit is read-only and produces small artifacts, which is exactly what Kaggle's short sessions suit. Training remains on Colab.
+
+### Consequences
+
+* Per-session dataset transfer is the standing cost of training on Colab. Preflight should measure it so epoch-time estimates include it.
+* Free-tier Drive is sufficient for checkpoints under this retention policy, but not for the dataset. This must not be worked around by staging the dataset to Drive.
+* Auditing on Kaggle and training on Colab means two environments touch the data. Dataset identity, recorded per `docs/DATA_CONTRACT.md`, is what proves they saw the same bytes. The audit records the mirror's identity; training validates against it.
+* Writing checkpoints locally and then copying to Drive keeps a slow or failing Drive write from stalling or corrupting training.
+* If the runtime disk cannot hold the dataset plus working files, the fallback is a documented subset run, explicitly labeled as such, never a silent reduction.
+
+### Alternatives considered
+
+**Dataset archive cached on Drive, extracted per session.** Faster than re-downloading and the pattern `docs/ENVIRONMENTS.md` prefers in general. Rejected as the default here because the archive does not fit in free-tier Drive. Worth revisiting on a paid tier, where it would be the better option.
+
+**Train on Kaggle instead of Colab.** Removes staging entirely, since the data is already attached. Rejected because Kaggle's session limits are tighter than Colab's and its GPU allocation is less generous for a multi-hour fine-tuning run. Kaggle is used for the audit, where its strengths apply.
+
+**Read the dataset directly from mounted Drive.** Simplest to set up, far too slow to decode thousands of videos per epoch, and prone to Drive rate limiting.
