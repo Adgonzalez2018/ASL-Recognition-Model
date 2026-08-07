@@ -6,7 +6,7 @@ Phase 2: ASL Citizen Audit and Data Layer
 
 ## Status
 
-In progress. Phase 2B foundations started.
+In progress. Phase 2A tooling and Phase 2B contracts complete; 2A execution blocked on dataset access.
 
 ## Objective
 
@@ -14,7 +14,7 @@ Understand the actual ASL Citizen distribution, then build a reproducible path f
 
 ## Current Task
 
-Phase 2B: label map and manifest contracts, built and tested against synthetic fixtures so they are ready the moment real data is reachable.
+Phase 2C: video decoding, temporal sampling, and transforms. Running the 2A audit once a Kaggle runtime has the mirror attached.
 
 ## Blockers
 
@@ -31,27 +31,41 @@ Settled for this phase:
 * **Storage split**: dataset on ephemeral runtime disk, checkpoints and run outputs on Google Drive. See D-007.
 * **Expected class count**: 2731. This is the value the audit verifies against, not an assumption the code may rely on. The label map is built from the data.
 
-Outstanding: the Git remote URL, needed so the Colab notebook can clone rather than depend on a Drive copy.
+Git remote: `https://github.com/Adgonzalez2018/ASL-Recognition-Model.git`. The Colab and Kaggle notebooks clone from it.
 
 ---
 
 ## Phase 2A: Dataset Access and Audit
 
-Blocked on dataset access. The tooling is built ahead of the data so that the audit is one command once a runtime has the files.
+Tooling complete. Execution blocked on dataset access — the audit reads real files and cannot be simulated. Running it is now one command.
 
-### Tasks
+### Tooling
 
-- [ ] Resolve the Kaggle mirror identity and record it.
-- [ ] Compare the mirror's structure and metadata against the official ASL Citizen release.
-- [ ] Inspect the annotation and split files.
-- [ ] Confirm the official train, validation, and test structure.
-- [ ] Identify signer metadata.
-- [ ] Count classes, videos, and signers by split.
-- [ ] Audit class-frequency distribution.
-- [ ] Audit video durations, frame rates, and resolutions.
-- [ ] Detect missing and corrupted videos.
-- [ ] Determine whether mirroring or handedness metadata exists.
-- [ ] Produce a versioned dataset audit report.
+- [x] Annotation parser that discovers structure rather than assuming it.
+- [x] Layout resolution: split files and video directory, searched recursively.
+- [x] Column resolution across official and mirror naming.
+- [x] Video probing: frame count, fps, duration, resolution, codec, rotation.
+- [x] Audit report generation with a versioned schema.
+- [x] `scripts/audit_dataset.py` entry point.
+- [x] `notebooks/kaggle/01_dataset_audit.ipynb` launcher.
+
+### Execution
+
+- [ ] Attach the Kaggle mirror and record its identity.
+- [ ] Run the layout check and confirm the resolved columns.
+- [ ] Run the full audit and commit the report.
+- [ ] Compare counts against the official ASL Citizen publication.
+- [ ] Resolve every problem the audit reports.
+
+### Design notes
+
+The parser refuses to guess. An unidentifiable label column, an ambiguous split file, or an unrecognized layout raises rather than falling back, because a wrong guess here means training against the wrong target and would not surface until the results looked strange.
+
+The audit reconciles annotation rows against manifest records, so a row that silently fails to become a record is caught rather than absorbed.
+
+Short-video reporting follows the configured frame count. Clips shorter than a frame count nobody is training at yet are recorded as information, not flagged as problems.
+
+Verified end to end against a synthetic dataset with real encoded video: a deliberately damaged copy surfaced signer leakage, a duplicate sample ID, a duplicate path, one video spanning two splits, a missing file, and a dropped row, and exited non-zero.
 
 ### Acceptance Criteria
 
