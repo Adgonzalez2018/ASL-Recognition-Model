@@ -8,7 +8,7 @@ This project covers training, evaluation, calibration, and robustness only. Infe
 
 ## Status
 
-Phase 2 (data layer) is complete apart from running the dataset audit, which needs the dataset. Phase 3 (training layer) is complete apart from preflight.
+Phase 2 (data layer) is complete apart from running the dataset audit, which needs the dataset. Phase 3 (training) is complete apart from preflight. Phase 4 (evaluation) is complete.
 
 The active granular plan is `docs/CURRENT_PHASE.md`. The stable phase sequence is `docs/ROADMAP.md`.
 
@@ -71,6 +71,18 @@ python ASL_training/scripts/train.py \
 ```
 
 Re-running the same command resumes from the last checkpoint rather than restarting, which is the normal path on Colab. The test manifest is never loaded.
+
+## Evaluate
+
+```bash
+# Validation: fit calibration and select a threshold
+python ASL_training/scripts/evaluate.py \
+    --checkpoint outputs/exp-001/run/checkpoints/best.pt \
+    --model-config ASL_training/configs/models/videomae_base.yaml \
+    --split validation --output-dir outputs/exp-001/run/evaluation/validation
+```
+
+Test evaluation requires the validation calibration and an explicit reason, and refuses to fit a temperature or select a threshold itself. Every test read is recorded in the report.
 
 ## Model preflight
 
