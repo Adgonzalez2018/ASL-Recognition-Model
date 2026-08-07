@@ -1,0 +1,106 @@
+# Datasets and raw media
+# Raw videos, archives, and extracted data must never be committed.
+ASL_training/data/*
+!ASL_training/data/.gitkeep
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Run outputs, checkpoints, optimizer states
+ASL_training/outputs/*
+!ASL_training/outputs/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# Generated artifacts.
+# Manifests, label maps, audits, and reports are generated. Whether any of them
+# may be committed depends on the source dataset license and their contents.
+# See docs/DATA_CONTRACT.md. Committing one requires an explicit force-add.
+ASL_training/artifacts/manifests/*
+ASL_training/artifacts/label_maps/*
+ASL_training/artifacts/audits/*
+ASL_training/artifacts/reports/*
+!ASL_training/artifacts/**/.gitkeep
+
+# Caches
+.cache/
+*_cache/
+frame_cache/
+decoded/
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+kaggle.json
+*.pem
+*.key
+credentials.json
+service_account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing and tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# Notebooks
+# Outputs are stripped before commit; checkpoints written by notebooks are ignored above.
+.ipynb_checkpoints/
+notebooks/**/outputs/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Weights & Biases / logging, if adopted later
+wandb/
+runs/
+lightning_logs/
+mlruns/

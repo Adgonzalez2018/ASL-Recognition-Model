@@ -1,0 +1,26 @@
+# Video Swin-Tiny: comparison architecture.
+#
+# Weights come from torchvision rather than mmaction2; see D-002 in
+# docs/DECISIONS.md. Results are therefore not directly comparable to published
+# Video Swin numbers.
+#
+# num_classes is resolved at runtime from the label map.
+
+model:
+  architecture: video_swin_tiny
+  pretrained: true
+
+  # torchvision Swin3D_T_Weights member name.
+  checkpoint: KINETICS400_V1
+
+  # This backbone was pretrained at 32 frames. Running the baseline at 16 holds
+  # the data protocol constant against VideoMAE, which is the fairness
+  # requirement in docs/TRAINING_CONTRACT.md. See D-003. If Video Swin
+  # underperforms in Phase 5, rule out frame count with a 32-frame run before
+  # concluding the architecture is weaker.
+  num_frames: 16
+  image_size: 224
+
+  fine_tuning: full
+
+  dropout: 0.0

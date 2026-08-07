@@ -1,0 +1,20 @@
+# Convenience install for notebook environments.
+# pyproject.toml is the authoritative dependency specification; keep these consistent.
+#
+# On Colab and Kaggle, torch and torchvision are preinstalled with builds matched to
+# the runtime's CUDA driver. Prefer installing the project without reinstalling torch:
+#
+#     pip install -e ASL_training --no-deps
+#     pip install transformers pyyaml pandas scikit-learn av tqdm
+#
+# See docs/ENVIRONMENTS.md.
+
+torch>=2.4
+torchvision>=0.19
+transformers>=4.44
+numpy>=1.24
+pyyaml>=6.0
+pandas>=2.0
+scikit-learn>=1.3
+av>=12.0
+tqdm>=4.66

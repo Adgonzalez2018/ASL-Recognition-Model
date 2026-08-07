@@ -1,0 +1,23 @@
+# VideoMAE-Base: primary architecture.
+#
+# num_classes is intentionally absent. It is resolved at runtime from the label
+# map so that the model and the label map cannot disagree. See
+# docs/MODEL_CONTRACT.md.
+
+model:
+  architecture: videomae_base
+  pretrained: true
+
+  # Kinetics-400 self-supervised pretrained backbone.
+  checkpoint: MCG-NJU/videomae-base
+
+  # This checkpoint's position embeddings are built for 16 frames and are not
+  # interpolated. Changing num_frames requires a checkpoint trained at that
+  # frame count; the adapter fails clearly rather than misaligning positions.
+  num_frames: 16
+  image_size: 224
+
+  # Full-model supervised fine-tuning is the project default.
+  fine_tuning: full
+
+  dropout: 0.0
