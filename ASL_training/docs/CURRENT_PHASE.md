@@ -289,7 +289,7 @@ This is a deliberate deviation from the roadmap's strict phase ordering, recorde
 - [x] Capture Git commit and dataset identities.
 - [x] Add one-batch and short smoke-run tests.
 - [x] Add a normal command-line training entry point.
-- [ ] Preflight mode reporting throughput and estimated epoch duration.
+- [x] Preflight mode reporting throughput and estimated epoch duration.
 
 ## Acceptance Criteria
 
@@ -340,9 +340,19 @@ scripts/train.py
 
 Training-layer coverage: checkpoint and resume, optimizer and scheduler, loop behaviour, and an end-to-end integration test that runs the real `scripts/train.py` from annotations through manifests, decoding, training, checkpointing, and resume across separate invocations.
 
-## Remaining
+## Preflight
 
-* Preflight mode: GPU type, peak memory, throughput, estimated epoch duration, checkpoint size. Most valuable measured on real Colab hardware with real data, so it is deferred until the dataset is reachable.
+`scripts/train_preflight.py` measures what a run will cost before one is started: throughput, peak GPU memory, estimated epoch and run duration, checkpoint size, and whether the data loader or the GPU is limiting.
+
+Design notes:
+
+* **Data and compute are timed separately.** The clock starts before the batch is pulled, so time spent waiting on the loader is attributed to data. Which side dominates is the actionable output: video decoding is CPU-bound and Colab's CPU allocation is modest, so the loader is a likely limiter, and the fix there is worker count rather than anything about the model.
+* **Warmup steps are discarded.** The first passes allocate caching-allocator blocks, compile kernels, and fill the prefetch queue, so timing them reports a number no later step reproduces.
+* **A loader restart is recorded and warned about.** If the dataset is smaller than the measured span the loop wraps, and those repeated clips decode from a warm page cache. Throughput would look better than reality, so the wrap count is reported and flagged.
+* **It exercises the real path**, including a checkpoint save and load, so checkpoint size is measured rather than guessed. That figure drives the Drive budget under D-007.
+* **It cannot be mistaken for an experiment.** `run_kind` is `preflight`, the report says so in its own payload, and no loss or accuracy is reported at all — only cost.
+
+## Remaining
 * ~~The default metric set is a placeholder.~~ Resolved: in-training validation now computes the real restricted metric set, and `selection_metric` is macro F1. See D-008.
 
 ---

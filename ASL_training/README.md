@@ -60,6 +60,19 @@ python ASL_training/scripts/audit_dataset.py --dataset-root "$ASL_DATASET_ROOT" 
 
 Exits non-zero on any integrity failure. Intended to run on Kaggle, where the mirror is already attached; see `docs/DECISIONS.md` D-007.
 
+## Preflight a training run
+
+Measures throughput, peak memory, estimated epoch duration, and whether the data loader or the GPU limits, using the real dataset. Takes a few minutes; run it before committing to a full baseline.
+
+```bash
+python ASL_training/scripts/train_preflight.py \
+    --model-config ASL_training/configs/models/videomae_base.yaml \
+    --training-config ASL_training/configs/training/baseline.yaml \
+    --dataset-root "$ASL_DATASET_ROOT"
+```
+
+A preflight is a cost measurement, not an experiment. It writes no run directory.
+
 ## Train
 
 ```bash

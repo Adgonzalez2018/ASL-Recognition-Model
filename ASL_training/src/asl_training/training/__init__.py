@@ -34,6 +34,7 @@ from .optim import (
     compute_total_steps,
     current_lrs,
 )
+from .preflight import PreflightReport, run_preflight
 
 __all__ = [
     "CheckpointError",
@@ -41,6 +42,7 @@ __all__ = [
     "CheckpointMetadata",
     "EpochResult",
     "OptimizerConfig",
+    "PreflightReport",
     "SchedulerConfig",
     "Trainer",
     "TrainingConfig",
@@ -56,6 +58,7 @@ __all__ = [
     "resolve_device",
     "resolve_precision",
     "restore",
+    "run_preflight",
     "seed_everything",
     "validate_resume_compatibility",
 ]
