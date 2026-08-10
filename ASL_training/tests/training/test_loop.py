@@ -414,3 +414,28 @@ def test_macro_f1_differs_from_top1_on_imbalanced_predictions():
     assert metrics["top1_accuracy"] == pytest.approx(0.9)
     assert metrics["macro_f1"] < 0.4
     assert metrics["mean_per_class_accuracy"] == pytest.approx(1 / 3)
+
+
+def test_bf16_requires_native_support_not_emulation(monkeypatch):
+    """torch reports bf16 'supported' on a T4 via emulation, which is far slower.
+
+    Emulated bf16 bypasses tensor cores and runs near fp32 speed. Selecting it
+    silently cost roughly an order of magnitude of throughput on a real run.
+    """
+    from asl_training.training import loop
+
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device=None: (7, 5))
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda *a, **k: True)  # what torch claims
+
+    enabled, dtype = loop.resolve_precision("bf16", torch.device("cuda"))
+    assert enabled
+    assert dtype is torch.float16, "pre-Ampere must fall back to fp16"
+
+
+def test_bf16_used_on_ampere_and_newer(monkeypatch):
+    from asl_training.training import loop
+
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda device=None: (8, 0))
+    enabled, dtype = loop.resolve_precision("bf16", torch.device("cuda"))
+    assert enabled
+    assert dtype is torch.bfloat16

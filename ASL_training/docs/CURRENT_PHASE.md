@@ -16,7 +16,7 @@ Understand the actual ASL Citizen distribution, then build a reproducible path f
 
 ## Current Task
 
-Commit the audit artifacts, then Phase 5 baseline runs. Phases 2, 3, and 4 are complete apart from training preflight.
+Re-run preflight with the bf16 fix, then set the run scope from the measured numbers. See Phase 5 Preflight Results at the end of this file.
 
 ## Blockers
 
@@ -449,3 +449,54 @@ scripts/evaluate.py
 `--num-workers` defaults to 4 and is configurable, because video decoding is CPU-bound and worker count is commonly the training bottleneck rather than the GPU. Colab's CPU allocation varies, so this will want tuning against real hardware; preflight should report whether the loader or the GPU is limiting.
 
 Integration tests run with `--num-workers 0`. Spawned workers deadlock under pytest on macOS, and worker behaviour is not what those tests exercise.
+
+---
+
+# Phase 5 Preflight Results and Open Work
+
+Measured 2026-08-10 on Kaggle, Tesla T4 (14.56 GB), Video Swin-Tiny, batch 8 x 4 accumulation, 4 workers.
+
+```text
+throughput          4.5 videos/s
+per optimizer step  7.123 s   (data 0.032s / 0%, compute 7.092s / 100%)
+bottleneck          compute
+peak memory         10.48 GB of 14.56 GB   (28% headroom)
+checkpoint          357 MB
+steps               1,255 per epoch, 25,100 over 20 epochs
+epoch               ~2.5 h
+full run            ~49.7 h, plus ~22 h validation
+```
+
+**This does not fit free Kaggle quota** (~30 GPU hours per week). Roughly 72 hours as configured.
+
+## Finding: bf16 was being emulated on a pre-Ampere GPU
+
+Preflight reported `precision bfloat16` on a T4. A T4 is compute capability 7.5; native bf16 needs 8.0.
+
+`torch.cuda.is_bf16_supported()` defaults to `including_emulation=True`, so on pre-Ampere hardware it returns True and falls through to an emulation check. Emulated bf16 bypasses the tensor cores entirely and runs near fp32 speed. The T4's fp16 tensor-core path is several times faster.
+
+`resolve_precision` trusted that call, so it selected the slow path and logged it as a success. Fixed: bf16 now requires compute capability 8.0 or higher, and anything older falls back to fp16 with a message explaining why torch claims otherwise.
+
+The 4.5 videos/s figure above was measured under emulated bf16 and is expected to improve substantially. **The improvement is unverified — re-run preflight to measure it.**
+
+## Open work, in priority order
+
+1. **Re-run preflight** with the precision fix. Everything below depends on the new numbers.
+
+2. **Reconsider the data-loading conclusion.** Data was 0% of step time only because compute was pathologically slow; the four workers kept up trivially. If compute speeds up several times, decoding may become the bottleneck, and `--num-workers` becomes the lever again.
+
+3. **Reduce validation cost.** Validation adds ~66 min per epoch against a ~149 min epoch, because it evaluates all 10,304 clips every time. Set `validate_every_epochs: 2` or higher, or validate on a fixed subset. Note that changing the validation protocol mid-project makes checkpoint selection non-comparable across runs, so decide before the first baseline.
+
+4. **Choose an epoch count from measured numbers**, not the config default of 20. With ~30 GPU hours a week, the run must fit the quota with headroom for the VideoMAE baseline as well.
+
+5. **Decide the role of the Swin run.** Is it the baseline VideoMAE is compared against, or a warm-up? This changes what the Phase 5 comparison means and should be settled before results exist.
+
+6. **VideoMAE-Base needs batch 4 with accumulation 8** on a T4; batch 8 runs out of memory. Recorded so the comparison notes the difference in physical batch size at equal effective batch.
+
+## Phase bookkeeping
+
+Phases 2, 3, and 4 are complete but not archived, and this file still names Phase 2 as active. Archiving requires explicit approval per `CLAUDE.md`. On approval:
+
+* move Phase 2, 3, and 4 sections to `docs/phases/archive/`
+* mark them complete in `docs/ROADMAP.md`
+* open a fresh `CURRENT_PHASE.md` for Phase 5, carrying forward the open work above

@@ -68,12 +68,32 @@ def resolve_precision(precision: str, device: torch.device) -> tuple[bool, torch
         return False, None
 
     if precision == "bf16":
-        if torch.cuda.is_bf16_supported():
+        if _has_native_bf16(device):
             return True, torch.bfloat16
-        logger.warning("bf16 is not supported on this GPU; falling back to fp16")
+        logger.warning(
+            "bf16 is not supported natively on this GPU (compute capability %d.%d); "
+            "falling back to fp16, which uses tensor cores. torch.cuda."
+            "is_bf16_supported() reports True here via emulation, but emulated bf16 "
+            "runs without tensor-core acceleration and is far slower.",
+            *torch.cuda.get_device_capability(device),
+        )
         return True, torch.float16
 
     return True, torch.float16
+
+
+def _has_native_bf16(device: torch.device) -> bool:
+    """Whether the GPU supports bf16 in hardware rather than by emulation.
+
+    torch.cuda.is_bf16_supported() defaults to including_emulation=True, so it
+    returns True on pre-Ampere cards such as the T4. Emulated bf16 bypasses the
+    tensor cores entirely and runs roughly at fp32 speed, which is a large and
+    silent throughput loss. Native bf16 requires compute capability 8.0.
+    """
+    try:
+        return torch.cuda.get_device_capability(device)[0] >= 8
+    except (RuntimeError, AssertionError):  # pragma: no cover
+        return False
 
 
 def seed_everything(seed: int) -> None:
