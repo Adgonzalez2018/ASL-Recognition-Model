@@ -14,7 +14,7 @@ Google Colab
 Kaggle notebooks
 ```
 
-Google Colab is the primary training environment for this project.
+Kaggle is the primary environment for both the dataset audit and training under free-tier compute, because the dataset is attached there with no transfer. Google Colab remains supported and is preferable on a paid tier. See D-007 and D-009 in `docs/DECISIONS.md`.
 
 ## Core Principle
 

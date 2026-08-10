@@ -331,3 +331,47 @@ In-training validation computes a restricted metric set — top-1, top-5, macro 
 **Decide after a smoke run.** Would have shown how the two diverge on real data, at the cost of an extra run and a decision made under time pressure once training was already underway.
 
 **Validation loss.** Stable and cheap, but only loosely coupled to the balanced-performance goal, and harder to reason about across vocabulary sizes.
+
+---
+
+## D-009: Training runs on Kaggle rather than Colab under free-tier compute
+
+Date: 2026-08-10
+Status: Accepted
+Phase: 5
+Amends: D-007
+
+### Context
+
+D-007 sent the audit to Kaggle and training to Colab, reasoning that Colab's longer sessions outweighed the cost of staging the dataset there. Two things have changed since.
+
+The audit measured the dataset: 83,399 videos. Staging that into a Colab runtime is a large transfer, and it repeats every session because `/content` is ephemeral. Kaggle attaches the same mirror read-only at `/kaggle/input` with no transfer at all.
+
+The project is also running on free compute. Free Colab gives shorter and less predictable sessions than the paid tier D-007 implicitly assumed. When a session is a few hours rather than twelve, an hour of dataset transfer is a large fraction of it, and that fraction is paid again on every reconnect.
+
+Kaggle's free tier grants roughly 30 GPU hours per week with sessions up to about 9-12 hours.
+
+### Decision
+
+Under free-tier compute, both the audit and training run on Kaggle. The Colab training notebook is retained for use on a paid tier or where Drive-backed persistence is preferred.
+
+Manifests are regenerated in each Kaggle session with `--probe-limit 0`, which skips video probing and completes in about a minute. This is verified to produce byte-identical manifests and label map to a full audit, and the session asserts that the regenerated manifest identity matches the one recorded in the committed audit report.
+
+Resume across sessions works by attaching the previous notebook version's output as an input and copying its checkpoints back into `/kaggle/working`.
+
+### Consequences
+
+* No per-session dataset transfer, which is the dominant fixed cost on free Colab.
+* Enabling a GPU restarts a Kaggle session and clears `/kaggle/working`, so an audit session cannot be continued into a training session. Regenerating manifests is the intended path rather than a workaround.
+* Persistence requires an explicit *Save Version*. An interactive session that is simply closed loses its checkpoints, which is a sharper failure mode than Colab's mounted Drive.
+* *Save & Run All* re-executes the notebook from the top. Training resumes rather than restarting, but the session clock restarts, so a run must fit the remaining session rather than the full one.
+* The weekly GPU quota is a real constraint on run length. Epoch count should be chosen from measured preflight numbers, not from the configuration default.
+* Kaggle and Colab may assign different GPUs. Run metadata records hardware per session, and D-004's guidance on mid-run hardware changes continues to apply.
+
+### Alternatives considered
+
+**Keep training on Colab.** Retained as an option, and preferable on a paid tier where sessions are long enough to amortize staging and Drive gives smoother persistence. Rejected as the default under free compute purely on transfer cost.
+
+**Cache the dataset archive on Drive and extract per Colab session.** Faster than re-downloading, but the archive does not fit in free-tier Drive, which is what D-007 already established.
+
+**Carry manifests between sessions as a Kaggle Dataset.** Works, and avoids regeneration entirely. Rejected as the default because regeneration takes about a minute, and re-deriving from the dataset with an identity check is a stronger guarantee than trusting a copied artifact.
