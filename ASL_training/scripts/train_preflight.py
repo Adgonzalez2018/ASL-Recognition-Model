@@ -17,9 +17,8 @@ Examples:
         --training-config configs/training/baseline.yaml \\
         --dataset-root "$ASL_DATASET_ROOT"
 
-    # Compare batch sizes to find what fits
-    python scripts/train_preflight.py ... --batch-size 4
-    python scripts/train_preflight.py ... --batch-size 16
+    # Halve the batch, double accumulation: same effective batch, less memory
+    python scripts/train_preflight.py ... --batch-size 4 --grad-accum 8
 """
 
 from __future__ import annotations
@@ -71,6 +70,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="override the training config, to compare what fits",
     )
+    parser.add_argument(
+        "--grad-accum",
+        type=int,
+        default=None,
+        help=(
+            "gradient accumulation steps. Raise this by the same factor you lower "
+            "--batch-size, so the effective batch stays comparable across runs on "
+            "different hardware."
+        ),
+    )
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", default=None)
     parser.add_argument(
@@ -100,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     if args.batch_size is not None:
         overrides["batch_size"] = args.batch_size
+    if args.grad_accum is not None:
+        overrides["gradient_accumulation_steps"] = args.grad_accum
     if args.device is not None:
         overrides["device"] = args.device
 
@@ -192,10 +203,14 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             if "out of memory" in str(exc).lower():
                 logger.error(
-                    "out of memory at batch size %d. Lower --batch-size and raise "
-                    "gradient_accumulation_steps by the same factor, so the "
-                    "effective batch stays comparable across runs.",
+                    "out of memory at batch size %d (effective %d). Halve "
+                    "--batch-size and double --grad-accum: --batch-size %d "
+                    "--grad-accum %d keeps the same effective batch on less "
+                    "memory.",
                     config.batch_size,
+                    config.effective_batch_size,
+                    max(config.batch_size // 2, 1),
+                    config.gradient_accumulation_steps * 2,
                 )
                 return 1
             raise

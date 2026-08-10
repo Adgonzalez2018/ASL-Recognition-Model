@@ -90,6 +90,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument(
+        "--grad-accum",
+        type=int,
+        default=None,
+        help=(
+            "gradient accumulation steps. Raise this by the same factor you lower "
+            "--batch-size, so the effective batch stays comparable across runs on "
+            "different hardware."
+        ),
+    )
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--device", default=None)
     parser.add_argument("--resume-from", default=None)
@@ -139,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
                 ("seed", args.seed),
                 ("epochs", args.epochs),
                 ("batch_size", args.batch_size),
+                ("gradient_accumulation_steps", args.grad_accum),
                 ("max_steps", args.max_steps),
                 ("device", args.device),
                 ("resume_from", args.resume_from),
