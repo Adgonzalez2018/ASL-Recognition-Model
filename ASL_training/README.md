@@ -120,6 +120,7 @@ src/        the implementation; layer packages under asl_training/
 scripts/    command-line entry points
 tests/      focused tests, mirroring the layer structure
 notebooks/  Colab and Kaggle launchers only, never authoritative logic
+            filenames name their platform; each guards against the wrong one
 artifacts/  generated manifests, label maps, audits, reports
 outputs/    run directories; never committed
 data/       dataset staging; never committed
@@ -137,6 +138,17 @@ export ASL_OUTPUT_ROOT=/path/to/outputs
 ```
 
 See `docs/ENVIRONMENTS.md` for local, Colab, and Kaggle specifics, including the Colab session and checkpoint-resume strategy.
+
+## Notebooks
+
+Each targets one platform and refuses to run on the other, because the two differ in ways that fail confusingly rather than obviously.
+
+| Notebook | Platform | Purpose |
+|---|---|---|
+| `notebooks/kaggle/01_audit_kaggle.ipynb` | Kaggle | Dataset audit. The mirror is attached there, so no download. |
+| `notebooks/kaggle/02_train_kaggle.ipynb` | Kaggle | Preflight and training. Recommended on free compute; see D-009. |
+| `notebooks/colab/02_train_colab.ipynb` | Colab | Preflight and training. Prefer on a paid tier, where sessions are long enough to amortize staging the dataset. |
+| `notebooks/colab/00_model_preflight_colab.ipynb` | Colab | Model-layer check on synthetic tensors. No dataset needed. |
 
 ## Documentation
 

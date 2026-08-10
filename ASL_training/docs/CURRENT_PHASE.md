@@ -47,7 +47,7 @@ Complete. Tooling built ahead of the data; the audit ran clean on the first atte
 - [x] Video probing: frame count, fps, duration, resolution, codec, rotation.
 - [x] Audit report generation with a versioned schema.
 - [x] `scripts/audit_dataset.py` entry point.
-- [x] `notebooks/kaggle/01_dataset_audit.ipynb` launcher.
+- [x] `notebooks/kaggle/01_audit_kaggle.ipynb` launcher.
 
 ### Execution
 
