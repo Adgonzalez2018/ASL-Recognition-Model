@@ -23,14 +23,25 @@ ASL_training/outputs/*
 *.onnx
 
 # Generated artifacts.
-# Manifests, label maps, audits, and reports are generated. Whether any of them
-# may be committed depends on the source dataset license and their contents.
-# See docs/DATA_CONTRACT.md. Committing one requires an explicit force-add.
+# Whether one may be committed depends on the source dataset license and on
+# what it actually contains. See docs/DATA_CONTRACT.md.
+#
+# Manifests stay out: they carry one row per video with source-relative paths
+# and participant identifiers. They also regenerate deterministically from the
+# dataset, and their recorded identity proves a regenerated copy matches, so
+# committing them buys nothing.
 ASL_training/artifacts/manifests/*
-ASL_training/artifacts/label_maps/*
-ASL_training/artifacts/audits/*
 ASL_training/artifacts/reports/*
 !ASL_training/artifacts/**/.gitkeep
+
+# Label maps and audit reports are committed deliberately. Both are small,
+# contain aggregate statistics and the gloss vocabulary rather than per-video
+# records, and are the evidence that a checkpoint's class IDs mean what a
+# report claims they mean.
+ASL_training/artifacts/label_maps/*
+ASL_training/artifacts/audits/*
+!ASL_training/artifacts/label_maps/asl_citizen.json
+!ASL_training/artifacts/audits/asl_citizen_audit.json
 
 # Caches
 .cache/

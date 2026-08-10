@@ -1,0 +1,115 @@
+{
+  "audit_version": 1,
+  "generated_at": "2026-08-10T17:44:26.879169+00:00",
+  "dataset_name": "asl_citizen",
+  "dataset_root": "/kaggle/input/datasets/abd0kamel/asl-citizen/ASL_Citizen",
+  "manifest_identity": "asl_citizen:83399:sha256:b864a6d5d84c5531",
+  "label_map_identity": "asl_citizen:2731:sha256:3a0b873befec998c",
+  "counts": {
+    "manifest_records": 83399,
+    "classes": 2731,
+    "signers": 52,
+    "by_split": {
+      "test": 32941,
+      "train": 40154,
+      "validation": 10304
+    },
+    "classes_by_split": {
+      "train": 2731,
+      "validation": 2731,
+      "test": 2731
+    },
+    "signers_by_split": {
+      "train": 35,
+      "validation": 6,
+      "test": 11
+    },
+    "annotation_rows": {
+      "test": 32941,
+      "train": 40154,
+      "validation": 10304
+    },
+    "annotation_rows_total": 83399,
+    "rows_dropped": 0
+  },
+  "class_balance": {
+    "min_samples_per_class": 21,
+    "max_samples_per_class": 45,
+    "median_samples_per_class": 31,
+    "classes_with_one_sample": 0,
+    "imbalance_ratio": 2.14
+  },
+  "media": {
+    "probed": 83399,
+    "complete": true,
+    "status_counts": {
+      "usable": 83399
+    },
+    "duration_seconds": {
+      "count": 83399,
+      "min": 0.064,
+      "p05": 1.466,
+      "median": 2.566,
+      "p95": 5.266,
+      "max": 22.6274,
+      "mean": 2.8043
+    },
+    "frame_count": {
+      "count": 83399,
+      "min": 3,
+      "p05": 42,
+      "median": 75,
+      "p95": 158,
+      "max": 680,
+      "mean": 82.7556
+    },
+    "fps": {
+      "count": 83399,
+      "min": 11.346,
+      "p05": 25.0,
+      "median": 29.9981,
+      "p95": 30.606,
+      "max": 120.0,
+      "mean": 29.5053
+    },
+    "resolutions": {
+      "640x480": 80184,
+      "960x540": 3211,
+      "480x640": 4
+    },
+    "codecs": {
+      "h264": 79873,
+      "mpeg4": 3526
+    },
+    "rotation_metadata_count": 0,
+    "videos_under_16_frames": 18,
+    "videos_under_32_frames": 788
+  },
+  "integrity": {
+    "errors": [],
+    "warnings": [],
+    "signer_independent": true
+  },
+  "metadata_availability": {
+    "handedness": null,
+    "mirroring_status": null,
+    "note": "Absent means the dataset provided no reliable value. Handedness and mirroring must not be inferred; a class-aware flip policy requires review, per docs/DATA_CONTRACT.md."
+  },
+  "environment": {
+    "python": "3.12.13",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35"
+  },
+  "problems": [
+    "18 probed video(s) have fewer than the configured 16 frames; the short-video policy must handle these explicitly rather than dropping them"
+  ],
+  "source_identity": {
+    "source_id": "datasets",
+    "annotation_rows": {
+      "test": 32941,
+      "train": 40154,
+      "validation": 10304
+    },
+    "parse_problems": 0,
+    "note": "A hosted mirror must not be assumed identical to the official release. Compare these counts against official metadata before treating a run as a valid baseline."
+  }
+}

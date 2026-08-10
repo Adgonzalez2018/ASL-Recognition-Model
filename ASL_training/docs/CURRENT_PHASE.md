@@ -56,7 +56,7 @@ Complete. Tooling built ahead of the data; the audit ran clean on the first atte
 - [x] Run the full audit. Complete: all 83,399 videos probed.
 - [x] Compare counts against the official ASL Citizen publication.
 - [x] Resolve every problem the audit reports.
-- [ ] Commit the audit report and label map to the repository.
+- [x] Commit the audit report and label map to the repository.
 
 ### Audit Results
 
@@ -104,6 +104,15 @@ manifest identity   asl_citizen:83399:sha256:b864a6d5d84c5531
 **5. Four portrait videos crop vertically.** The 480x640 clips resize on the short side and centre-crop, removing top and bottom, which could clip raised hands. Documented rather than corrected: 4 of 83,399 does not justify a resolution-dependent code path, and a per-aspect-ratio rule would introduce an unreviewed preprocessing difference between samples.
 
 **6. No rotation metadata anywhere**, which removes the orientation risk between Kaggle and Colab entirely.
+
+**7. 27% of the vocabulary is numbered variants.** 309 base words carry more than one variant — `ABOUT1`/`ABOUT2`, `DROWN1` through `DROWN5` — covering 739 classes. These are distinct signs for the same English word. Two consequences:
+
+* Confusion analysis will likely show variant pairs confused with one another. That is linguistically meaningful rather than a defect, and should be read as such.
+* Phase 8 cross-dataset work will hit these hardest. Mapping `ABOUT1` and `ABOUT2` onto a single WLASL `about` is exactly the ambiguous case `docs/DATA_CONTRACT.md` requires be excluded rather than guessed.
+
+The label map keeps every variant distinct. The normalized-collision check would have refused to merge them.
+
+**8. Recorded `source_id` is uninformative in this run.** The notebook passed the Kaggle attachment folder name, `datasets`, rather than the mirror slug. The true identity survives in `dataset_root` (`abd0kamel/asl-citizen`), so nothing is lost, but the notebook has been corrected to derive the owner/dataset path for future runs.
 
 ### Pipeline verification against real characteristics
 
