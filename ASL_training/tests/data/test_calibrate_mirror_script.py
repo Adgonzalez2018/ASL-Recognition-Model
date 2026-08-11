@@ -95,6 +95,47 @@ def test_mismatched_frames_are_reported(calibrate):
     assert report.to_dict()["frame_mismatches"] == ["s2"]
 
 
+class FakeRecord:
+    """A manifest record whose frame count was never probed."""
+
+    def __init__(self, tmp_path, frame_count=None):
+        self.sample_id = "sample-1"
+        self.video_path = "videos/sample-1.mp4"
+        self.width = 640
+        self.height = 480
+        self.frame_count = frame_count
+        self._root = tmp_path
+
+    def resolve_path(self, dataset_root):
+        return self._root / self.video_path
+
+
+def test_frame_count_probed_when_manifest_lacks_it(calibrate, tmp_path, monkeypatch):
+    """Kaggle regenerates manifests with --probe-limit 0, so frame_count is absent.
+
+    Requiring it filtered every record out and the calibration refused to run.
+    The count has to come from the file instead.
+    """
+    source = tmp_path / "videos" / "sample-1.mp4"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"x" * 100)
+
+    mirror_root = tmp_path / "mirror"
+
+    def fake_run(command, **kwargs):
+        Path(command[-1]).write_bytes(b"y" * 40)
+        return type("Completed", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(calibrate.subprocess, "run", fake_run)
+    monkeypatch.setattr(calibrate, "count_frames", lambda path: 75)
+
+    result = calibrate.encode_one(FakeRecord(tmp_path), tmp_path, mirror_root, 20, "-vsync 0")
+
+    assert result.ok
+    assert result.source_frames == 75
+    assert result.frames_match
+
+
 # Projections ---------------------------------------------------------------
 
 

@@ -370,11 +370,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # Train split only. Calibration needs representative video files, not the
     # evaluation splits, and there is no reason to touch test here.
+    #
+    # Frame counts may be absent: the Kaggle session regenerates manifests with
+    # --probe-limit 0, which skips the probing that fills them in. Counting the
+    # sampled clips directly costs a few seconds and keeps this independent of
+    # how the manifests were produced.
     manifest = Manifest.from_csv(manifest_path)
-    records = [r for r in manifest.records if r.frame_count]
-    if not records:
-        logger.error("no manifest records carry a frame count; cannot verify preservation.")
-        return 1
+    records = manifest.records
+    probed = sum(1 for r in records if r.frame_count)
+    if not probed:
+        logger.info("manifest carries no frame counts; probing the sample directly")
 
     rng = random.Random(args.seed)
     sample = rng.sample(records, min(args.samples, len(records)))
