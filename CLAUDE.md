@@ -45,25 +45,34 @@ Training and serving are separate project stages. The current scope is the train
 
 ## Current Objective
 
-Build a reproducible training and evaluation pipeline for isolated ASL classification using:
+Phases 0 through 4 are complete and archived under `ASL_training/docs/phases/archive/`. The active phase is **Phase 5: baseline experiments**.
 
-* ASL Citizen as the primary dataset
-* VideoMAE-Base as the primary architecture
-* Video Swin-Tiny as the comparison architecture
-* supervised full-model fine-tuning
-* multiclass cross-entropy loss
-* official signer-independent dataset splits
+Built and verified:
 
-The initial work should proceed in this order:
+* model layer, both architectures, preflighted against real weights
+* data layer, verified against the real ASL Citizen distribution
+* training layer with atomic checkpointing and cross-session resume
+* evaluation layer with calibration and selective prediction
+* 715 offline tests, plus 7 marked `pretrained`
 
-1. Basic model layer
-2. Data layer
-3. Training layer
-4. Evaluation layer
-5. Experiment layer
-6. Robustness experiments
+The dataset audit has run. It found 83,399 videos across 2,731 classes and 52 signers, signer-independent splits, and every file decodable. Identities are recorded in `ASL_training/artifacts/`.
 
-A thin synthetic or dummy batch may be used while building the model layer. Do not build the complete data system before the model input and output contracts are verified.
+What remains needs GPU time rather than code. `ASL_training/docs/CURRENT_PHASE.md` holds the ordered next steps.
+
+### Working environment
+
+Training and the dataset audit run on **Kaggle free tier**, roughly 30 GPU hours a week on a Tesla T4, with the ASL Citizen mirror attached read-only so there is no download. Colab is supported but secondary; see D-009.
+
+Notebooks are launchers only. Each names its platform in its filename and refuses to run on the other. They invoke project scripts through `subprocess`, never through IPython shell escapes, because `$VAR` expansion rules there caused several silent failures.
+
+### Decisions that constrain new work
+
+Read `ASL_training/docs/DECISIONS.md` before changing anything it covers. The ones most likely to matter:
+
+* **D-003** both architectures run at 16 frames, though Video Swin was pretrained at 32
+* **D-006** VideoMAE checkpoints need an attention-bias repair on some transformers versions
+* **D-008** best-checkpoint selection is macro F1, not top-1
+* **D-009** Kaggle is the primary environment under free compute
 
 ## Authoritative Documents
 
@@ -77,7 +86,8 @@ Read these before modifying the project:
 6. `ASL_training/docs/DATA_CONTRACT.md`
 7. `ASL_training/docs/TRAINING_CONTRACT.md`
 8. `ASL_training/docs/EVALUATION_CONTRACT.md`
-9. `ASL_training/docs/DECISIONS.md`
+9. `ASL_training/docs/ENVIRONMENTS.md`
+10. `ASL_training/docs/DECISIONS.md`
 
 If documentation conflicts:
 

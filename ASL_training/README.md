@@ -8,7 +8,9 @@ This project covers training, evaluation, calibration, and robustness only. Infe
 
 ## Status
 
-Phase 2 (data layer) is complete apart from running the dataset audit, which needs the dataset. Phase 3 (training) is complete apart from preflight. Phase 4 (evaluation) is complete.
+Phases 0 through 4 are complete. **Phase 5, baseline experiments, is active** — what remains needs GPU time rather than code.
+
+The dataset audit has run: 83,399 videos, 2,731 classes, 52 signers, signer-independent, every file decodable.
 
 The active granular plan is `docs/CURRENT_PHASE.md`. The stable phase sequence is `docs/ROADMAP.md`.
 

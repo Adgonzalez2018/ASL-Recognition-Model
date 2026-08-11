@@ -168,7 +168,7 @@ A stable model-layer interface that the data and training layers can target.
 
 # Phase 2: ASL Citizen Audit and Data Layer
 
-Status: Active. Granular plan in `docs/CURRENT_PHASE.md`.
+Status: Complete. Archived at `docs/phases/archive/PHASE-2-data-layer.md`.
 
 ## Objective
 
@@ -293,6 +293,8 @@ A reproducible ASL Citizen data pipeline shared by both model families.
 
 # Phase 3: Training Layer
 
+Status: Complete. Archived at `docs/phases/archive/PHASE-3-training-layer.md`.
+
 ## Objective
 
 Connect the model and data layers into a complete supervised fine-tuning system.
@@ -368,6 +370,8 @@ A reusable, resumable full-dataset fine-tuning command.
 ---
 
 # Phase 4: Evaluation Layer
+
+Status: Complete. Archived at `docs/phases/archive/PHASE-4-evaluation-layer.md`.
 
 ## Objective
 
@@ -454,6 +458,8 @@ A checkpoint-to-evaluation pipeline that produces classification, signer, calibr
 ---
 
 # Phase 5: Baseline Experiments
+
+Status: Active. Granular plan in `docs/CURRENT_PHASE.md`.
 
 ## Objective
 
@@ -810,11 +816,13 @@ These concerns should not alter the initial training implementation unless a spe
 
 Phases 0 and 1 are complete and archived under `docs/phases/archive/`.
 
-The active phase is Phase 2, ASL Citizen audit and data layer:
+Phases 0 through 4 are complete and archived under `docs/phases/archive/`.
+
+The active phase is Phase 5, baseline experiments:
 
 ```text
-Audit the real ASL Citizen distribution, then build a reproducible path from
-raw videos to standardized model batches shared by both architectures.
+Train and compare clean baselines for Video Swin-Tiny and VideoMAE-Base
+under one shared protocol on the official signer-independent splits.
 ```
 
 The granular plan, current task, and blockers live in `docs/CURRENT_PHASE.md`.
