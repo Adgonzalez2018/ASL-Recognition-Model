@@ -41,11 +41,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from asl_training.data import (
+    SCALE_FILTER,
+    SHORT_SIDE,
     Manifest,
     TemporalSampler,
     VideoDecodeError,
     count_frames,
     decode_clip,
+    detect_fps_flag,
+    encode_command,
+    ffmpeg_available,
 )
 
 logger = logging.getLogger("calibrate_video_mirror")
@@ -53,13 +58,9 @@ logger = logging.getLogger("calibrate_video_mirror")
 # The full dataset, from the committed audit. Used only to extrapolate.
 TOTAL_VIDEOS = 83_399
 
-# Short side of the mirror. The training transform resizes to 256 and then crops
-# 224, so encoding below this would remove the random-crop augmentation.
-SHORT_SIDE = 256
-
-# Landscape keeps height at SHORT_SIDE, portrait keeps width. "-2" lets the
-# encoder pick the other dimension while staying even, which h264 requires.
-SCALE_FILTER = f"scale='if(gt(iw,ih),-2,{SHORT_SIDE})':'if(gt(iw,ih),{SHORT_SIDE},-2)'"
+# Encoding settings live in asl_training.data.mirror, shared with the build, so
+# that what is measured here is what gets built.
+__all__ = ["SCALE_FILTER", "SHORT_SIDE"]
 
 
 @dataclass
@@ -195,66 +196,6 @@ class Report:
             "encode_failures": [{"sample_id": c.sample_id, "error": c.error} for c in self.failed],
             "resolutions": dict(Counter(c.resolution for c in self.clips)),
         }
-
-
-def ffmpeg_available() -> bool:
-    return shutil.which("ffmpeg") is not None
-
-
-def encode_command(source: Path, target: Path, crf: int, fps_flag: str) -> list[str]:
-    """Build the re-encode command.
-
-    Frame rate is passed through rather than normalized: the manifests record a
-    frame count per clip and the temporal sampler indexes against it, so changing
-    the frame count would silently invalidate sampling.
-    """
-    return [
-        "ffmpeg",
-        "-nostdin",
-        "-y",
-        "-loglevel",
-        "error",
-        "-i",
-        str(source),
-        "-vf",
-        SCALE_FILTER,
-        "-c:v",
-        "libx264",
-        "-crf",
-        str(crf),
-        "-preset",
-        "veryfast",
-        "-pix_fmt",
-        "yuv420p",
-        *fps_flag.split(),
-        "-threads",
-        "1",
-        "-an",
-        str(target),
-    ]
-
-
-def detect_fps_flag(source: Path, work_dir: Path) -> str:
-    """Pick the frame-rate passthrough flag this ffmpeg understands.
-
-    Newer builds use -fps_mode, older ones -vsync. Both keep every source frame;
-    guessing wrong changes the frame count, which is the one thing that must not
-    move.
-    """
-    probe = work_dir / ".fps-probe.mp4"
-    for flag in ("-fps_mode passthrough", "-vsync 0"):
-        probe.unlink(missing_ok=True)
-        result = subprocess.run(
-            encode_command(source, probe, 30, flag),
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            probe.unlink(missing_ok=True)
-            logger.info("using frame-rate flag: %s", flag)
-            return flag
-    probe.unlink(missing_ok=True)
-    raise RuntimeError("neither -fps_mode nor -vsync worked; check the ffmpeg build")
 
 
 def encode_one(

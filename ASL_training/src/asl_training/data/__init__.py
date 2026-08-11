@@ -40,6 +40,17 @@ from .manifest import (
     ValidationReport,
     normalize_split,
 )
+from .mirror import (
+    SCALE_FILTER,
+    SHORT_SIDE,
+    MirrorError,
+    detect_fps_flag,
+    encode_clip,
+    encode_command,
+    ffmpeg_available,
+    probe_dimensions,
+    verify_clip,
+)
 from .sampling import SHORT_VIDEO_POLICY, STRATEGIES, TemporalSampler
 from .transforms import (
     IMAGENET_MEAN,
@@ -54,6 +65,8 @@ __all__ = [
     "IMAGENET_MEAN",
     "IMAGENET_STD",
     "REQUIRED_FIELDS",
+    "SCALE_FILTER",
+    "SHORT_SIDE",
     "SHORT_VIDEO_POLICY",
     "SPLITS",
     "STRATEGIES",
@@ -66,6 +79,7 @@ __all__ = [
     "Manifest",
     "ManifestRecord",
     "ManifestValidationError",
+    "MirrorError",
     "PreprocessingSpec",
     "SampleFailure",
     "TemporalSampler",
@@ -77,10 +91,16 @@ __all__ = [
     "collate_clips",
     "count_frames",
     "decode_clip",
+    "detect_fps_flag",
+    "encode_clip",
+    "encode_command",
+    "ffmpeg_available",
     "normalize_gloss",
     "normalize_split",
     "parse_annotations",
+    "probe_dimensions",
     "probe_video",
     "resolve_layout",
+    "verify_clip",
     "worker_init_fn",
 ]
