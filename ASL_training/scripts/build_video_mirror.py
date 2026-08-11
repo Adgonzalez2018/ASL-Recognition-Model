@@ -49,6 +49,7 @@ from asl_training.data import (
     encode_clip,
     ffmpeg_available,
     verify_clip,
+    write_substrate,
 )
 
 logger = logging.getLogger("build_video_mirror")
@@ -234,6 +235,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         records.extend(Manifest.from_csv(path).records)
 
+    # Recorded in the mirror's declaration, so a mirror can be traced to the
+    # source it was built from.
+    source_identity = Manifest(records=list(records)).identity
+
     if args.limit:
         records = records[: args.limit]
 
@@ -288,6 +293,17 @@ def main(argv: list[str] | None = None) -> int:
     if not args.verify_only:
         copy_splits(args.dataset_root, args.mirror_root)
         shutil.rmtree(args.mirror_root / ".scratch", ignore_errors=True)
+
+        # Only declare a mirror that completed. A partial build carrying a
+        # substrate marker could be trained against and recorded as valid.
+        if not report.failures and not args.limit:
+            identity = write_substrate(
+                args.mirror_root,
+                short_side=SHORT_SIDE,
+                crf=args.crf,
+                source_identity=source_identity,
+            )
+            logger.info("declared substrate: %s", identity)
 
     print()
     print(report.summary(args.mirror_root))

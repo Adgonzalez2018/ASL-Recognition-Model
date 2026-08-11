@@ -10,7 +10,11 @@ training:
   run_kind: full
   seed: 42
 
-  epochs: 20
+  # Chosen from measurement, not default. 15,060 optimizer steps at effective
+  # batch 32, roughly 19 h per architecture against the re-encoded mirror. The
+  # cosine schedule spans this count, so changing it changes the learning-rate
+  # trajectory and makes runs non-comparable. See D-012.
+  epochs: 12
   batch_size: 8
 
   # Effective batch = batch_size x gradient_accumulation_steps. Raise this
@@ -51,7 +55,13 @@ training:
   # vocabulary this uneven. See D-008.
   selection_metric: macro_f1
   selection_mode: max
-  validate_every_epochs: 1
+
+  # Validation evaluates all 10,304 clips and was about a third of every epoch.
+  # Cadence is reduced rather than the split subsetted: validation averages 3.8
+  # samples per class over 2,731 classes, and a subset would push that toward 1,
+  # turning macro F1 into noise. Selection then chooses among 3 candidates
+  # (epochs 4, 8, 12). See D-012.
+  validate_every_epochs: 4
 
   # Colab sessions end without warning, so an interruption should cost at most
   # this much work. Per-epoch alone is not enough: a full-dataset epoch can

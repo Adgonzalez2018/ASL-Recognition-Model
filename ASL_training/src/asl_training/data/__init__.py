@@ -43,13 +43,17 @@ from .manifest import (
 from .mirror import (
     SCALE_FILTER,
     SHORT_SIDE,
+    SOURCE_SUBSTRATE,
+    SUBSTRATE_FILE,
     MirrorError,
     detect_fps_flag,
     encode_clip,
     encode_command,
     ffmpeg_available,
     probe_dimensions,
+    substrate_identity,
     verify_clip,
+    write_substrate,
 )
 from .sampling import SHORT_VIDEO_POLICY, STRATEGIES, TemporalSampler
 from .transforms import (
@@ -68,8 +72,10 @@ __all__ = [
     "SCALE_FILTER",
     "SHORT_SIDE",
     "SHORT_VIDEO_POLICY",
+    "SOURCE_SUBSTRATE",
     "SPLITS",
     "STRATEGIES",
+    "SUBSTRATE_FILE",
     "DatasetAudit",
     "DatasetStructureError",
     "DecodedClip",
@@ -101,6 +107,8 @@ __all__ = [
     "probe_dimensions",
     "probe_video",
     "resolve_layout",
+    "substrate_identity",
     "verify_clip",
     "worker_init_fn",
+    "write_substrate",
 ]

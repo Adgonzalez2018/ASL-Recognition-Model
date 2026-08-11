@@ -43,6 +43,7 @@ from asl_training.data import (
     TemporalSampler,
     TrainTransform,
     VideoClipDataset,
+    substrate_identity,
     worker_init_fn,
 )
 from asl_training.models import build_model_from_yaml
@@ -172,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         label_map_identity=label_map.identity,
         manifest_identity=manifests["train"].identity,
         preprocessing_identity=train_dataset.preprocessing.identity,
+        dataset_substrate=substrate_identity(args.dataset_root),
         fine_tuning=model.config.fine_tuning,
         optimizer_name=config.optimizer.name,
         scheduler_name=config.scheduler.name,

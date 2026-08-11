@@ -409,3 +409,101 @@ Both architectures train at batch 8 with 4 gradient accumulation steps, effectiv
 **Keep VideoMAE at 4x8.** Preserves the recorded constraint and is known to fit. Rejected because it is slower and because carrying a documented protocol difference that no longer exists would misdescribe the experiment.
 
 **Raise the batch further now that headroom exists.** Would change the effective batch and break comparability with the configuration Phase 5 was planned around, for a gain that is not the bottleneck. The bottleneck is CPU video decode, not GPU throughput.
+
+---
+
+## D-011: Training reads a re-encoded mirror of ASL Citizen at short side 256
+
+Date: 2026-08-11
+Status: Accepted
+Phase: 5
+
+### Context
+
+After the precision fix (D-010), preflight found both architectures spending ~52% of every optimizer step waiting on CPU video decode, with the GPU idle for roughly half of each step. Compute is ~2.95 s per step; data loading ~3.2 s.
+
+Workers are not the lever. Kaggle grants 4 cores, and 8 workers measured slower than 4 on both the step time and the data component. The floor is about 97 ms to decode one clip: the source is 640x480 and a median 75 frames are decoded to keep the 16 the sampler wants.
+
+Options assessed were a downscaled mirror, a validation cache, GPU decoding via DALI, decord, storing fewer frames per clip, and renting a machine with more cores. Of these, only the mirror is both free and independent of the Kaggle environment. GPU decoding requires moving the spatial transform pipeline onto the GPU, replacing the layer that guarantees temporally consistent transforms. Storing fewer frames was rejected outright: it would shrink the pool `random_segment` draws from, reducing temporal augmentation on a dataset already at 14.7 training samples per class, and would pre-corrupt the Phase 6 temporal robustness work.
+
+Calibration over 300 clips on 2026-08-11 measured, through the real loader path:
+
+```text
+decode          134.3 ms -> 51.5 ms per clip     2.61x
+size ratio      0.153 of source, 7.2 GB projected
+encode          5.5 h at 4 jobs
+frame drift     0 of 300
+failures        0 of 300
+```
+
+### Decision
+
+Phase 5 and later phases train against a mirror of ASL Citizen re-encoded at short side 256, h264, CRF 20, frame rate passed through.
+
+Short side 256 is not arbitrary: the spatial transform resizes to 256 and then crops 224, so encoding below it would leave the random crop nothing to move within, removing the augmentation rather than merely shrinking the file. The scale filter is orientation-aware so the dataset's portrait clips are scaled by their short side like everything else.
+
+The mirror preserves relative paths, file names, frame counts, and the split files. Switching to it is a change of `--dataset-root` and nothing else. `docs/DATA_CONTRACT.md` defines the substrate requirements.
+
+Encoding settings live in `asl_training/data/mirror.py`, shared by the calibration that measured this and the build that produces it, so the two cannot drift.
+
+### Consequences
+
+* Decoding is expected to stop being the bottleneck; the step should become compute-bound and the epoch fall from ~2.1 h toward ~1.4 h for both architectures. **This is arithmetic from an isolated measurement and must be confirmed by preflight against the built mirror.**
+* The re-encode is lossy. Every split must use the mirror, and no result from the mirror may be compared against a result from the source. This binds the Phase 5 baselines, the Phase 6 robustness evaluation, the Phase 7 targeted retraining, and any Phase 8 cross-dataset work.
+* Run metadata must record the substrate. A run whose substrate is unknown is not a usable control.
+* The mirror reproduces the source's manifest and label-map identities exactly, because those hash sample IDs, paths, labels, signers, and splits, and deliberately exclude resolution and codec. That equality is the acceptance check, not a sanity check.
+* Every clip is verified on write: frame count against the source, and short side 256. Wrong geometry is the dangerous failure, because it decodes without error and trains at the wrong scale.
+* Calibration could not verify the sample's resolution mix, because manifests regenerated with `--probe-limit 0` carry no width or height. The portrait branch of the scale filter is therefore untested against real video, and per-file verification during the build is what covers it.
+* The mirror is roughly 7 GB and lives as a Kaggle Dataset. It is not committed, per the repository data boundary.
+* If the mirror is ever rebuilt at different settings, it is a different substrate and prior results do not carry over.
+
+### Alternatives considered
+
+**Cache the validation set.** Validation sampling is deterministic, so the tensors are identical every epoch and caching could not change a metric — the safest option of the set. Deferred because the exact cache is ~25 GB against Kaggle's ~20 GB working directory, and because the mirror reduces validation cost anyway. Worth re-measuring after the mirror.
+
+**All-intra encoding, seeking to the 16 wanted frames.** Would decode 16 frames instead of 75. Rejected because `decode_clip` deliberately does not seek: these are variable-frame-rate webcam recordings, 11 to 120 fps, where seeking can change which frames are selected, and an optimization must not do that. It would also inflate storage past the working-directory limit.
+
+**GPU decoding via DALI.** The highest ceiling, and the T4's decode ASIC is idle. Rejected for now because it requires adopting a GPU-side transform pipeline in place of the current one, and because Kaggle rebuilds the environment every session. Revisit if the project leaves Kaggle.
+
+**decord.** Worth benchmarking after the mirror rather than before, since its advantage is keyframe seeking and the decoder already stops early at the highest requested index.
+
+**Rent a machine with more cores.** Effective and costs money rather than engineering. Rejected because Kaggle's value is the attached dataset; staging tens of gigabytes elsewhere each session costs more than the speedup returns.
+
+---
+
+## D-012: Phase 5 baselines run 12 epochs, validating every 4
+
+Date: 2026-08-11
+Status: Accepted
+Phase: 5
+
+### Context
+
+`configs/training/baseline.yaml` defaulted to 20 epochs, chosen before any measurement. The cosine schedule spans the configured epoch count, so the value must be fixed before the first run; changing it later changes the learning-rate trajectory and makes runs non-comparable.
+
+Validation evaluates all 10,304 clips. Before the mirror that cost ~78 min for Swin and ~54 min for VideoMAE against ~126 and ~129 min training epochs — about a third of every epoch.
+
+Free Kaggle grants roughly 30 GPU hours per week, and Phase 5 needs two baselines.
+
+### Decision
+
+Baselines run **12 epochs** with **`validate_every_epochs: 4`**.
+
+Validation cadence is reduced rather than the validation set subsetted. Validation averages 3.8 samples per class across 2,731 classes; a subset would push that toward 1 and turn macro F1 — the selection metric under D-008 — into noise.
+
+### Consequences
+
+* 15,060 optimizer steps at effective batch 32, which is a reasonable fine-tuning budget for a pretrained video backbone on 40,154 samples.
+* Projected against the mirror: roughly 19 h per architecture, about 37 h for both. That spans two quota weeks with room for interruption, resume, and evaluation.
+* Validation runs at epochs 4, 8, and 12, so best-checkpoint selection chooses among **three** candidates. That is thin. Post-mirror, validation is cheap enough that `validate_every_epochs: 2` would give six candidates for roughly 3 h more per architecture, and is worth reconsidering once preflight confirms the mirror's effect.
+* Both figures are projections from calibration, not measurements of a training run. Preflight against the built mirror should confirm them before the first baseline starts.
+* Both architectures use the same epoch count and cadence, so neither is advantaged.
+* A run stopped early by quota is not a 12-epoch run and must not be reported as one.
+
+### Alternatives considered
+
+**Keep 20 epochs.** Roughly 62 h for both architectures against the mirror, more than two weeks of quota with nothing left for evaluation or a seed repeat. Rejected on budget, not on principle; the checkpoint selected by macro F1 is unlikely to be the last epoch anyway.
+
+**8 epochs.** Fits both baselines in about one week. Rejected as the default because it risks undertraining a 2,731-class problem, and because the saving buys less than it costs in confidence.
+
+**A fixed validation subset.** Cheaper per validation and allows a tighter cadence. Rejected because it degrades the selection metric, which is the thing validation exists to produce.

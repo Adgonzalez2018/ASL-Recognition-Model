@@ -16,7 +16,7 @@ Train and compare clean baselines for Video Swin-Tiny and VideoMAE-Base on ASL C
 
 ## Current Task
 
-Calibrate the downscaled dataset mirror. Decode is the bottleneck and the mirror is the only lever that does not cost money; `scripts/calibrate_video_mirror.py` measures whether it is worth building.
+Build the re-encoded mirror (D-011), then re-run preflight against it. Calibration measured 2.61x cheaper decoding; the build is a CPU-only Kaggle session, `notebooks/kaggle/03_mirror_kaggle.ipynb`.
 
 ## Blockers
 
@@ -81,19 +81,17 @@ The remaining options, in the order they were assessed:
 
 Storing fewer frames per clip was rejected outright. It would shrink the pool `random_segment` draws from, reducing temporal augmentation on a dataset already at 14.7 samples per class, and would pre-corrupt the Phase 6 temporal robustness work.
 
-### 3. Cut validation cost
+### 3. Validation cadence, settled
 
-Validation evaluates all 10,304 clips every epoch: ~78 min for Swin and ~54 min for VideoMAE, against ~126 and ~129 min training epochs. Roughly a third of every epoch.
+`validate_every_epochs: 4`, committed to `configs/training/baseline.yaml`. Cadence reduced rather than the split subsetted, because validation averages 3.8 samples per class and a subset would turn macro F1 into noise. See D-012.
 
-Reduce the cadence rather than subsetting. Validation averages 3.8 samples per class across 2,731 classes; a subset would push that toward 1 and turn macro F1 — the selection metric under D-008 — into noise. `validate_every_epochs: 4` costs ~6.5 h over 20 epochs instead of ~26 h and still gives five selection points.
+Worth revisiting once preflight confirms the mirror: post-mirror, validation should be cheap enough that cadence 2 costs ~3 h more per architecture and doubles the selection candidates from 3 to 6. Decide before the first baseline, not after.
 
-There is no CLI flag for this. It is `validate_every_epochs` in `configs/training/baseline.yaml`, so changing it is a config edit and a commit, which is the right constraint: it lands in run metadata and cannot drift between runs.
+### 4. Epoch count, settled
 
-**Decide before the first baseline.** Changing the validation protocol mid-project makes checkpoint selection non-comparable between runs.
+12 epochs, committed. 15,060 optimizer steps at effective batch 32, roughly 19 h per architecture against the mirror. See D-012.
 
-### 4. Choose the epoch count from measurement
-
-`configs/training/baseline.yaml` defaults to 20, which was a guess. The run must fit the weekly quota with room for the VideoMAE baseline as well.
+The cosine schedule spans this count, so it cannot change once a run starts.
 
 ### 5. Settle what the Swin run is
 
@@ -117,6 +115,10 @@ Then compare on top-1, top-5, macro F1, mean per-class accuracy, worst-signer ac
 ## Constraints that carry into this phase
 
 **Both architectures run batch 8 x 4 accumulation**, effective batch 32 (D-010). The earlier constraint that VideoMAE needed 4 x 8 was an artifact of emulated bf16 and no longer holds: measured at 6.09 GB of 14.56. Swin is the memory-heavier of the two at 10.47 GB, despite a third the parameters.
+
+**Training reads the re-encoded mirror, not the source** (D-011). The re-encode is lossy, so every split must use it and no result from the mirror may be compared against one from the source. This binds Phases 6, 7, and 8 as well. Run metadata must record the substrate.
+
+**12 epochs, validating every 4** (D-012). The cosine schedule spans the epoch count, so it is fixed before the first run.
 
 **Both architectures run at 16 frames**, though Swin was pretrained at 32 (D-003). If Swin underperforms, rule out frame count with a 32-frame run before concluding the architecture is weaker.
 

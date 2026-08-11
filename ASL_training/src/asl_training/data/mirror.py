@@ -19,11 +19,22 @@ Both are verified per file. See docs/DATA_CONTRACT.md.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
 
 from .decode import VideoDecodeError, count_frames
+
+# A mirror declares itself here, in the dataset root, so a run can record what it
+# actually read. Manifest identity cannot serve this purpose: it is identical
+# between source and mirror by design, which is what makes the mirror a valid
+# substitute and also what makes it invisible in a run record.
+SUBSTRATE_FILE = "substrate.json"
+
+# What a dataset root with no declaration is called. The original download has
+# no marker file and never will.
+SOURCE_SUBSTRATE = "source"
 
 # The training transform resizes to 256 and then crops 224. Encoding below this
 # would leave the random crop nothing to move within, removing the spatial
@@ -43,6 +54,48 @@ FPS_FLAGS = ("-fps_mode passthrough", "-vsync 0")
 
 class MirrorError(RuntimeError):
     """Raised when a clip cannot be re-encoded, or the result is not usable."""
+
+
+def substrate_identity(dataset_root: Path) -> str:
+    """Name the substrate a dataset root represents.
+
+    Returns SOURCE_SUBSTRATE for the original dataset, or an identity describing
+    the re-encoding for a mirror. Every real run records this: the re-encode is
+    lossy, so results from different substrates are not comparable, and nothing
+    else in the run record distinguishes them.
+    """
+    marker = Path(dataset_root) / SUBSTRATE_FILE
+    if not marker.exists():
+        return SOURCE_SUBSTRATE
+
+    try:
+        declared = json.loads(marker.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise MirrorError(f"unreadable substrate declaration at {marker}: {exc}") from exc
+
+    identity = declared.get("identity")
+    if not identity:
+        raise MirrorError(f"{marker} declares no identity")
+    return str(identity)
+
+
+def write_substrate(dataset_root: Path, *, short_side: int, crf: int, source_identity: str) -> str:
+    """Declare a built mirror, and return its identity.
+
+    Encoding settings are part of the identity because a mirror rebuilt at
+    different settings is a different substrate, and results do not carry over.
+    """
+    identity = f"mirror:short_side={short_side}:crf={crf}"
+    payload = {
+        "identity": identity,
+        "short_side": short_side,
+        "crf": crf,
+        "codec": "h264",
+        "source_manifest_identity": source_identity,
+        "lossy": True,
+    }
+    (Path(dataset_root) / SUBSTRATE_FILE).write_text(json.dumps(payload, indent=2) + "\n")
+    return identity
 
 
 def ffmpeg_available() -> bool:

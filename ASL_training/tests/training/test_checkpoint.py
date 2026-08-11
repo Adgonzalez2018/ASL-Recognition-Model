@@ -39,6 +39,7 @@ def make_metadata(**overrides) -> CheckpointMetadata:
         "num_classes": NUM_CLASSES,
         "label_map_identity": "asl_citizen:4:sha256:abc",
         "preprocessing_identity": "preprocessing:train:sha256:def",
+        "dataset_substrate": "source",
         "fine_tuning": "full",
         "optimizer_name": "adamw",
         "scheduler_name": "cosine",
@@ -228,6 +229,10 @@ def test_compatible_metadata_passes():
         ("fine_tuning", "head_only", "fine_tuning"),
         ("optimizer_name", "sgd", "optimizer"),
         ("scheduler_name", "linear", "scheduler"),
+        # A mirror preserves paths and frame counts, so manifest identity is
+        # identical to the source's and cannot catch this. Resuming across the
+        # two would mix lossy-different copies of the dataset inside one run.
+        ("dataset_substrate", "mirror:short_side=256:crf=20", "dataset_substrate"),
     ],
 )
 def test_incompatible_checkpoint_is_rejected(field_name, value, expected):

@@ -74,6 +74,11 @@ class CheckpointMetadata:
     label_map_identity: str | None = None
     manifest_identity: str | None = None
     preprocessing_identity: str | None = None
+    # Which copy of the dataset was read. Manifest identity is deliberately
+    # identical between the source and a re-encoded mirror, so it cannot
+    # distinguish them; without this, a run's record does not say what it
+    # trained on. See D-011.
+    dataset_substrate: str | None = None
     fine_tuning: str = "full"
     optimizer_name: str = "adamw"
     scheduler_name: str = "cosine"
@@ -292,6 +297,10 @@ def validate_resume_compatibility(
             recorded.preprocessing_identity,
             metadata.preprocessing_identity,
         ),
+        # Resuming a source-trained checkpoint against the mirror, or the
+        # reverse, would mix two lossy-different copies of the dataset within one
+        # run, and nothing else here would notice.
+        ("dataset_substrate", recorded.dataset_substrate, metadata.dataset_substrate),
         ("fine_tuning", recorded.fine_tuning, metadata.fine_tuning),
     ):
         if was and now and was != now:

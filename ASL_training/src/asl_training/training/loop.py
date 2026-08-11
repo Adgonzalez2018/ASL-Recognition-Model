@@ -584,6 +584,10 @@ class Trainer:
             ),
             "train_samples": len(self.train_loader.dataset),
             "val_samples": len(self.val_loader.dataset) if self.val_loader else 0,
+            # Promoted out of metadata because it is the field most likely to be
+            # read on its own: results from different substrates are not
+            # comparable, and manifest identity cannot tell them apart. See D-011.
+            "dataset_substrate": self.metadata.dataset_substrate,
             "environment": environment_summary(self.device),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }

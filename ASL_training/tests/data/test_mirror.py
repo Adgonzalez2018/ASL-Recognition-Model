@@ -11,6 +11,7 @@ are what gets tested.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -183,3 +184,53 @@ def test_verify_reports_an_undecodable_clip(written, monkeypatch):
 
     with pytest.raises(mirror.MirrorError, match="does not decode"):
         mirror.verify_clip(written, 75)
+
+
+# Substrate declaration -----------------------------------------------------
+
+
+def test_a_root_without_a_marker_is_the_source(tmp_path):
+    """The original download has no marker file and never will."""
+    assert mirror.substrate_identity(tmp_path) == mirror.SOURCE_SUBSTRATE
+
+
+def test_written_substrate_round_trips(tmp_path):
+    identity = mirror.write_substrate(
+        tmp_path, short_side=256, crf=20, source_identity="asl_citizen:83399:sha256:abc"
+    )
+
+    assert identity == "mirror:short_side=256:crf=20"
+    assert mirror.substrate_identity(tmp_path) == identity
+
+
+def test_encoding_settings_are_part_of_the_identity(tmp_path):
+    """A mirror rebuilt at other settings is a different substrate."""
+    a = mirror.write_substrate(tmp_path, short_side=256, crf=20, source_identity="x")
+    b = mirror.write_substrate(tmp_path, short_side=256, crf=18, source_identity="x")
+
+    assert a != b
+
+
+def test_substrate_records_its_source(tmp_path):
+    mirror.write_substrate(
+        tmp_path, short_side=256, crf=20, source_identity="asl_citizen:83399:sha256:abc"
+    )
+    declared = json.loads((tmp_path / mirror.SUBSTRATE_FILE).read_text())
+
+    assert declared["source_manifest_identity"] == "asl_citizen:83399:sha256:abc"
+    assert declared["lossy"] is True
+
+
+def test_unreadable_declaration_raises_rather_than_defaulting(tmp_path):
+    """Falling back to 'source' would mislabel a mirror run as a source run."""
+    (tmp_path / mirror.SUBSTRATE_FILE).write_text("{not json")
+
+    with pytest.raises(mirror.MirrorError, match="unreadable"):
+        mirror.substrate_identity(tmp_path)
+
+
+def test_declaration_without_an_identity_raises(tmp_path):
+    (tmp_path / mirror.SUBSTRATE_FILE).write_text('{"short_side": 256}')
+
+    with pytest.raises(mirror.MirrorError, match="no identity"):
+        mirror.substrate_identity(tmp_path)

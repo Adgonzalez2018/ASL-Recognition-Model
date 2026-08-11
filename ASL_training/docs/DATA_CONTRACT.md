@@ -121,6 +121,30 @@ Reusable source modules must not hardcode environment-specific absolute paths.
 
 The core data loader should receive resolved paths rather than contain Kaggle- or Colab-specific logic.
 
+## Dataset Substrate
+
+A run may read either the original dataset or a re-encoded copy of it. Which one it read is part of the experiment.
+
+A substrate is a substitute for the source only when it preserves:
+
+* every relative video path and file name
+* every clip's frame count
+* the split files, copied rather than regenerated
+* the set of samples, exactly
+
+Path and record preservation keeps the manifest identity unchanged, which is what proves the experiment's structure was not altered. Frame-count preservation matters because manifests record a count per clip and the temporal sampler indexes against it; drift there corrupts sampling silently rather than failing.
+
+Geometry is not preserved and is not required to be. A substrate may re-encode at a lower resolution, provided the short side is at least the spatial preprocessing's resize target, so that the random crop retains its freedom to move.
+
+Re-encoding is lossy. Therefore:
+
+* every split must use the same substrate, without exception
+* a baseline and the robustness or cross-dataset work compared against it must use the same substrate
+* run metadata must record which substrate was used
+* results from different substrates must not be compared
+
+The current substrate is recorded in `docs/DECISIONS.md`. `scripts/build_video_mirror.py` produces one and verifies each clip; `--verify-only` re-checks an existing one without modifying it.
+
 ## Repository Data Boundary
 
 The repository may contain:
