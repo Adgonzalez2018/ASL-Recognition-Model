@@ -12,6 +12,7 @@ See docs/TRAINING_CONTRACT.md.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -345,15 +346,30 @@ def run_preflight(
                 )
         measurements["estimated_sessions"] = round(epoch_seconds * config.epochs / 3600 / 12, 2)
 
-    # Bottleneck guidance. Video decoding is CPU-bound, and Colab's CPU
-    # allocation is modest, so the loader is a common limiter here.
+    # Bottleneck guidance. Video decoding is CPU-bound, so more workers help
+    # only while cores remain. Kaggle gives 4; oversubscribing them measured
+    # slower on both the step and the data share (see D-009, Phase 5 appendix).
     if data_share > 50:
         workers = measurements["num_workers"]
-        warnings.append(
+        cpus = os.cpu_count()
+        measurements["cpu_count"] = cpus
+        head = (
             f"data loading is {data_share:.0f}% of each step, so the GPU is "
-            f"idle most of the time. Raising --num-workers above {workers} is "
-            f"likely to help more than any model or batch-size change."
+            f"idle most of the time. "
         )
+        if cpus is not None and workers >= cpus:
+            warnings.append(
+                head + f"--num-workers is already {workers} on {cpus} CPU core(s), "
+                f"so this floor is CPU-bound: more workers will oversubscribe the "
+                f"cores and are likely to make the step slower, not faster. Reduce "
+                f"decoding cost instead, through fewer frames, a smaller decode "
+                f"resolution, or a faster clip source."
+            )
+        else:
+            warnings.append(
+                head + f"Raising --num-workers above {workers} is likely to help "
+                f"more than any model or batch-size change."
+            )
 
     if wraps:
         warnings.append(

@@ -10,6 +10,9 @@ See docs/TRAINING_CONTRACT.md.
 
 from __future__ import annotations
 
+import os
+import time
+
 import pytest
 import torch
 
@@ -223,6 +226,54 @@ def test_warns_when_data_loading_dominates(model_config, monkeypatch):
         assert any("num-workers" in w for w in report.warnings)
     else:
         assert not any("num-workers" in w for w in report.warnings)
+
+
+class SlowLoader:
+    """A loader whose decoding dominates the step, as on a CPU-starved host.
+
+    Wraps a real loader rather than raising its ``num_workers``, so the delay
+    stays in this process and no worker is spawned to serve it.
+    """
+
+    def __init__(self, num_workers: int, delay: float = 0.03):
+        self._loader = make_loader(32, 4)
+        self.dataset = self._loader.dataset
+        self.drop_last = self._loader.drop_last
+        self.num_workers = num_workers
+        self._delay = delay
+
+    def __iter__(self):
+        for batch in self._loader:
+            time.sleep(self._delay)
+            yield batch
+
+
+def data_bound_warning(model_config, monkeypatch, *, workers, cpus):
+    monkeypatch.setattr(os, "cpu_count", lambda: cpus)
+    report = preflight(model_config, steps=4, loaders=(SlowLoader(workers), None))
+
+    assert report.measurements["data_share_percent"] > 50
+    warning = next(w for w in report.warnings if "data loading is" in w)
+    return report, warning
+
+
+def test_data_loading_warning_recommends_more_workers_when_cores_are_free(
+    model_config, monkeypatch
+):
+    """Two workers on eight cores: there is real headroom to spend."""
+    _, warning = data_bound_warning(model_config, monkeypatch, workers=2, cpus=8)
+
+    assert "Raising --num-workers above 2" in warning
+    assert "CPU-bound" not in warning
+
+
+def test_data_loading_warning_does_not_oversubscribe_the_cores(model_config, monkeypatch):
+    """Four workers on four cores, as on Kaggle: more workers measured slower."""
+    report, warning = data_bound_warning(model_config, monkeypatch, workers=4, cpus=4)
+
+    assert "CPU-bound" in warning
+    assert "Raising --num-workers" not in warning
+    assert report.measurements["cpu_count"] == 4
 
 
 def test_warns_when_validation_is_expensive_relative_to_training(model_config):
