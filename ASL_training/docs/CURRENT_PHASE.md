@@ -8,7 +8,7 @@ Phase 5: Baseline Experiments
 
 Not started. All supporting layers are complete; what remains needs GPU time.
 
-Preflight has run once and produced a blocking finding: the run as configured does not fit free Kaggle quota. The precision bug behind it is fixed but the improvement is unmeasured.
+Preflight has now run four times with the precision fix in place. The bug is confirmed fixed and two constraints changed as a result, but the run still does not fit free Kaggle quota comfortably: both architectures spend about half of every step waiting on CPU video decode.
 
 ## Objective
 
@@ -16,7 +16,7 @@ Train and compare clean baselines for Video Swin-Tiny and VideoMAE-Base on ASL C
 
 ## Current Task
 
-Re-run preflight with the bf16 fix. Every scoping decision below depends on the new numbers.
+Calibrate the downscaled dataset mirror. Decode is the bottleneck and the mirror is the only lever that does not cost money; `scripts/calibrate_video_mirror.py` measures whether it is worth building.
 
 ## Blockers
 
@@ -61,21 +61,33 @@ Environment: Kaggle, Tesla T4 (14.56 GB), free tier. See D-009.
 
 ## Immediate work, in order
 
-### 1. Re-run preflight
+### 1. Preflight, done
 
-`notebooks/kaggle/02_train_kaggle.ipynb`, section 5. Everything below depends on the result.
+Four runs on 2026-08-11, recorded in the appendix. Compute fell 2.4x with fp16 active. Both architectures now cost the same and both are limited by CPU video decode, not the GPU.
 
-The previous run measured 4.5 videos/s and ~2.5 h per epoch under **emulated bf16**, which bypasses the T4's tensor cores. That is fixed; the gain is unverified.
+Two constraints changed: VideoMAE fits batch 8 (D-010), and raising `--num-workers` past 4 makes things *worse*, because Kaggle gives 4 cores.
 
-### 2. Re-examine the bottleneck
+### 2. Decide the decode bottleneck
 
-The previous run reported data loading at 0% of step time. That was only true because compute was pathologically slow — four workers kept up trivially. If compute speeds up several times, decoding may become the limit, and `--num-workers` becomes the lever.
+Data loading is ~52% of every step for both models. Workers are not the lever — 8 workers measured slower than 4. The floor is ~97 ms to decode one 640x480 clip, of which 16 frames are kept out of a median 75.
+
+The remaining options, in the order they were assessed:
+
+* **Downscaled mirror** of the dataset at short side 256. One-time CPU-only cost, no GPU quota, ~2-2.5x estimated. Gated on `scripts/calibrate_video_mirror.py`; abandon if measured under ~1.6x.
+* **Validation cache.** Validation sampling is deterministic, so the tensors are identical every epoch and caching cannot change a metric. Deferred: the exact cache is ~25 GB against Kaggle's ~20 GB working directory, and the mirror may make it unnecessary. Re-measure after.
+* **GPU decode (NVDEC/DALI).** Highest ceiling, but requires moving the transform pipeline onto the GPU and fights Kaggle's per-session environment. Not while on Kaggle.
+* **decord.** Worth benchmarking after the mirror, not before: its advantage is keyframe seeking, and `decode_clip` already stops early at the highest requested index.
+* **Renting CPU cores.** Works, but Kaggle's value is the attached dataset; staging it elsewhere costs more than the speedup returns.
+
+Storing fewer frames per clip was rejected outright. It would shrink the pool `random_segment` draws from, reducing temporal augmentation on a dataset already at 14.7 samples per class, and would pre-corrupt the Phase 6 temporal robustness work.
 
 ### 3. Cut validation cost
 
-Validation added ~66 min per epoch against a ~149 min epoch, because it evaluates all 10,304 clips every time.
+Validation evaluates all 10,304 clips every epoch: ~78 min for Swin and ~54 min for VideoMAE, against ~126 and ~129 min training epochs. Roughly a third of every epoch.
 
-Options: `validate_every_epochs: 2` or higher, or a fixed validation subset.
+Reduce the cadence rather than subsetting. Validation averages 3.8 samples per class across 2,731 classes; a subset would push that toward 1 and turn macro F1 — the selection metric under D-008 — into noise. `validate_every_epochs: 4` costs ~6.5 h over 20 epochs instead of ~26 h and still gives five selection points.
+
+There is no CLI flag for this. It is `validate_every_epochs` in `configs/training/baseline.yaml`, so changing it is a config edit and a commit, which is the right constraint: it lands in run metadata and cannot drift between runs.
 
 **Decide before the first baseline.** Changing the validation protocol mid-project makes checkpoint selection non-comparable between runs.
 
@@ -104,7 +116,7 @@ Then compare on top-1, top-5, macro F1, mean per-class accuracy, worst-signer ac
 
 ## Constraints that carry into this phase
 
-**Physical batch differs between architectures.** Video Swin-Tiny runs at batch 8 x 4 accumulation; VideoMAE-Base runs out of memory at batch 8 on a T4 and needs batch 4 x 8. Effective batch stays 32 for both. `docs/TRAINING_CONTRACT.md` requires the difference be reported, not concealed.
+**Both architectures run batch 8 x 4 accumulation**, effective batch 32 (D-010). The earlier constraint that VideoMAE needed 4 x 8 was an artifact of emulated bf16 and no longer holds: measured at 6.09 GB of 14.56. Swin is the memory-heavier of the two at 10.47 GB, despite a third the parameters.
 
 **Both architectures run at 16 frames**, though Swin was pretrained at 32 (D-003). If Swin underperforms, rule out frame count with a 32-frame run before concluding the architecture is weaker.
 
@@ -163,6 +175,33 @@ Preflight reported `precision bfloat16` on a T4. A T4 is compute capability 7.5;
 
 `resolve_precision` trusted that call, so it selected the slow path and logged it as a success. Fixed: bf16 now requires compute capability 8.0 or higher, and anything older falls back to fp16 with a message explaining why torch claims otherwise.
 
-The 4.5 videos/s figure above was measured under emulated bf16 and is expected to improve substantially. **The improvement is unverified — re-run preflight to measure it.**
+The 4.5 videos/s figure above was measured under emulated bf16. Superseded by the measurements below; kept as the record of what the bug cost.
 
-Superseded by the Immediate work section above; kept as the measurement record.
+---
+
+# Appendix: preflight after the precision fix (2026-08-11)
+
+Kaggle, Tesla T4 (14.56 GB), fp16 active (`precision float16 (requested bf16)`), 1,255 optimizer steps per epoch. Reports in `outputs/preflight/`.
+
+| Model | Batch | Workers | Step | Data | Compute | Peak mem | Epoch | Val |
+|---|---|---|---|---|---|---|---|---|
+| Swin | 8 x 4 | 4 | 6.040 s | 51% | 2.943 s | 10.47 GB | 2.1 h | 78 min |
+| Swin | 8 x 4 | 8 | 6.495 s | 53% | 3.034 s | 10.47 GB | 2.3 h | 89 min |
+| VideoMAE | 4 x 8 | 4 | 6.688 s | 54% | 3.106 s | 3.79 GB | 2.3 h | 59 min |
+| VideoMAE | 8 x 4 | 4 | 6.163 s | 52% | 2.955 s | 6.09 GB | 2.1 h | 54 min |
+
+## Findings
+
+**The precision fix worked.** Compute fell from 7.092 s to 2.943 s per step for Swin, 2.4x. Total step time improved far less, 7.123 s to 6.040 s, because decoding absorbed the gain.
+
+**The bottleneck moved to CPU video decode.** Both architectures now spend ~52% of each step waiting on data, so the GPU idles roughly half the time. The floor is ~97 ms per clip: 640x480, median 75 frames decoded to keep 16, on Kaggle's 4 cores.
+
+**More workers made it worse.** 8 workers measured 6.495 s against 4 workers' 6.040 s, and data loading rose from 3.097 s to 3.461 s. Four workers already saturate four cores. Preflight's own warning recommends raising `--num-workers` whenever data loading dominates, with no knowledge of core count; it gave bad advice twice here and should be made core-aware.
+
+**The two architectures cost the same.** Compute is within 0.4% between them at the same effective batch, despite VideoMAE having three times the parameters. Video Swin-Tiny at 16 frames does more work than its parameter count suggests.
+
+**VideoMAE fits batch 8.** See D-010. The 4 x 8 requirement was an artifact of emulated bf16 holding fp32 working copies.
+
+## Budget
+
+At batch 8 x 4, 4 workers, `validate_every_epochs: 4`, 10 epochs each: Swin ~25 h, VideoMAE ~24 h. About **49 h, two weeks of free quota**. A successful mirror would bring both into roughly one week.

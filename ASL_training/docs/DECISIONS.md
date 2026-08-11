@@ -375,3 +375,37 @@ Resume across sessions works by attaching the previous notebook version's output
 **Cache the dataset archive on Drive and extract per Colab session.** Faster than re-downloading, but the archive does not fit in free-tier Drive, which is what D-007 already established.
 
 **Carry manifests between sessions as a Kaggle Dataset.** Works, and avoids regeneration entirely. Rejected as the default because regeneration takes about a minute, and re-deriving from the dataset with an identity check is a stronger guarantee than trusting a copied artifact.
+
+---
+
+## D-010: Both architectures train at batch 8 with 4 accumulation steps
+
+Date: 2026-08-11
+Status: Accepted
+Phase: 5
+
+### Context
+
+Phase 5 planning recorded that VideoMAE-Base runs out of memory at batch 8 on a T4 and therefore requires batch 4 with 8 accumulation steps, while Video Swin-Tiny runs batch 8 with 4. Effective batch stayed 32 for both, but the physical batch differed, and `docs/TRAINING_CONTRACT.md` requires such a difference to be reported in every comparison.
+
+That constraint was measured while `resolve_precision` was selecting emulated bf16 on a pre-Ampere GPU, the fault corrected in the preceding commit. Emulated bf16 does not use the tensor cores and carries fp32 working copies, so it inflated memory as well as time.
+
+Re-measured on 2026-08-11 with fp16 active, VideoMAE-Base at batch 8 peaks at 6.09 GB of the T4's 14.56 GB — well within budget — and is faster than 4x8: 6.163 s per optimizer step against 6.688 s. Video Swin-Tiny at the same batch peaks at 10.47 GB.
+
+### Decision
+
+Both architectures train at batch 8 with 4 gradient accumulation steps, effective batch 32.
+
+### Consequences
+
+* The physical-batch asymmetry disappears. Both models share batch size, accumulation, worker count, and precision, so nothing about the optimization differs between the two Phase 5 baselines.
+* `docs/TRAINING_CONTRACT.md`'s reporting requirement is satisfied trivially rather than by disclosure.
+* Video Swin-Tiny uses 72% more memory than VideoMAE-Base despite having a third the parameters, because window attention holds more activations than VideoMAE's flat token stream. Swin, not VideoMAE, is the memory-constrained architecture on this hardware.
+* Memory headroom is 28% for Swin and 58% for VideoMAE. Neither is close to failing, but Swin is the one to watch if frame count or resolution is raised later.
+* Any measurement taken before the precision correction is suspect on both time and memory, and should be re-measured rather than reasoned from.
+
+### Alternatives considered
+
+**Keep VideoMAE at 4x8.** Preserves the recorded constraint and is known to fit. Rejected because it is slower and because carrying a documented protocol difference that no longer exists would misdescribe the experiment.
+
+**Raise the batch further now that headroom exists.** Would change the effective batch and break comparability with the configuration Phase 5 was planned around, for a gain that is not the bottleneck. The bottleneck is CPU video decode, not GPU throughput.
